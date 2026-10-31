@@ -497,7 +497,10 @@ $("review-sync").onclick = async () => {
   $("review-status").textContent = "경기 불러와서 분석 중… (한 판에 2~3초)";
   try {
     await ensureChamps();
-    const list = await api("/api/review/sync", { method: "POST", body: JSON.stringify({ riot_id: $("riot-id").value, count: +$("review-count").value }) });
+    const key = await api("/api/riot-key").catch(() => ({ set: false }));
+    const list = key.set && !key.problem
+      ? await api("/api/review/sync", { method: "POST", body: JSON.stringify({ riot_id: $("riot-id").value, count: +$("review-count").value }) })
+      : await api("/api/review/sync-lcu", { method: "POST", body: JSON.stringify({ count: +$("review-count").value }) });  // 키 없으면 롤 클라이언트 전적에서
     renderMatchList(list);
     $("review-status").textContent = `${list.length}경기 · 홈의 개념별 달성률이 업데이트됐어요`;
     if (list.length && !currentMatch) openReview(list[0].match_id);

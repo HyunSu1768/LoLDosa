@@ -198,6 +198,10 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
             if have:
                 await hub.send(msg)
                 return msg
+        if not settings.riot_api_key:  # 키가 없으면 롤 클라이언트 전적에서 바로 받는다
+            msg = await postgame_from_lcu(game_id, mid)
+            if msg:
+                return msg
         if not settings.riot_api_key or not user.puuid:
             await hub.send({"type": "postgame", "status": "need_setup",
                             "message": "게임이 끝났어요. 자동 복기를 하려면 경기 복기 탭에서 Riot ID를 한 번 불러와 주세요."})
@@ -223,6 +227,85 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
         await hub.send({"type": "postgame", "status": "timeout", "match_id": mid,
                         "message": "경기 기록이 아직 안 올라왔어요. 조금 뒤 경기 복기 탭에서 불러와 주세요."})
         return None
+
+    async def lcu_store_games(game_ids: list[int]) -> list[str]:
+        """롤 클라이언트 전적 → 개인 경기 DB (키 없이). 내 puuid 도 클라이언트에서 채운다."""
+        from ..lcu.client import LcuClient
+        from ..lcu.connection import find_credentials
+        from ..lcu.matchhistory import fetch
+
+        creds = find_credentials()
+        if not creds:
+            raise HTTPException(409, "롤 클라이언트가 켜져 있어야 키 없이 전적을 불러올 수 있어요.")
+        lcu = LcuClient(creds)
+        saved = []
+        try:
+            me = await lcu.current_summoner() or {}
+            if me.get("puuid") and me["puuid"] != user.puuid:
+                rid = f"{me.get('gameName', '')}#{me.get('tagLine', '')}".strip("#")
+                user.update({"puuid": me["puuid"], "riot_id": user.riot_id or rid}).save(settings.data_dir)
+            for gid in game_ids:
+                mid = f"{settings.platform.upper()}_{gid}"
+                with personal_store() as st:
+                    if st.has_match(mid):
+                        saved.append(mid)
+                        continue
+                got = await fetch(lcu, gid, settings.platform, DIAG)
+                if not got:
+                    continue
+                with personal_store() as st:
+                    st.save_raw(mid, *got)
+                    st.ingest(got[0], got[1], "personal")
+                saved.append(mid)
+        finally:
+            await lcu.aclose()
+        return saved
+
+    async def postgame_from_lcu(game_id: int, mid: str) -> dict | None:
+        for _ in range(10):  # 게임 직후엔 클라이언트 전적에 바로 안 뜰 수 있다
+            try:
+                async with personal_lock:
+                    saved = await lcu_store_games([game_id])
+                if saved:
+                    async with personal_lock:
+                        msg = postgame_message(await asyncio.to_thread(_review, mid), mid)
+                    await hub.send(msg)
+                    return msg
+            except HTTPException:
+                return None
+            except Exception:
+                log.exception("클라이언트 전적 가져오기 실패")
+            await asyncio.sleep(15)
+        return None
+
+    @app.post("/api/review/sync-lcu")
+    async def review_sync_lcu(body: dict = Body(default={})):
+        """키 없이 내 최근 솔랭을 롤 클라이언트에서 불러오기."""
+        from ..lcu.client import LcuClient
+        from ..lcu.connection import find_credentials
+        from ..lcu.matchhistory import recent_game_ids
+        from ..review.sync import list_matches
+
+        creds = find_credentials()
+        if not creds:
+            raise HTTPException(409, "롤 클라이언트가 켜져 있어야 키 없이 전적을 불러올 수 있어요.")
+        lcu = LcuClient(creds)
+        try:
+            ids = await recent_game_ids(lcu, int(body.get("count", 20)))
+        finally:
+            await lcu.aclose()
+        async with personal_lock:
+            await lcu_store_games(ids)
+            with personal_store() as st:
+                games = list_matches(st, user.puuid, 30)
+        for g in games:
+            if g["match_id"] not in progress.data["checks"] and g["position"] == "JUNGLE":
+                try:
+                    async with personal_lock:
+                        await asyncio.to_thread(_review, g["match_id"])
+                except Exception:  # noqa: BLE001
+                    log.exception("auto review failed %s", g["match_id"])
+        return annotate(games)
 
     def postgame_message(rv: dict, mid: str) -> dict:
         """복기 결과에서 '이번 판 핵심 하나'와 연습 목표 결과, 가장 아쉬운 실력 지표 하나."""

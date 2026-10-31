@@ -25,3 +25,8 @@ jobs:
           GID=$(uv run python scripts/make_e2e_fixture.py "$RUNNER_TEMP/e2e" | tail -1)
           LOLDOSA_DATA_DIR="$RUNNER_TEMP/e2e" uv run loldosa ddragon sync
           uv run python scripts/e2e_fake_client.py "$RUNNER_TEMP/e2e" "$GID"
+      - name: End-to-end without Riot API key (client match history)
+        run: |
+          GID=$(uv run python scripts/make_e2e_fixture.py "$RUNNER_TEMP/e2ek" keyless | tail -1)
+          cp -r "$RUNNER_TEMP/e2e/ddragon" "$RUNNER_TEMP/e2ek/"
+          uv run python scripts/e2e_fake_client.py "$RUNNER_TEMP/e2ek" "$GID" keyless

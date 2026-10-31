@@ -3,7 +3,8 @@
 흐름: lockfile 발견 → 챔선 세션(녹화본) 단계별 진행 → 브리핑 메시지 → 게임 시작(InProgress) → 종료(EndOfGame)
      → 자동 복기 알림(postgame ready) → 진단 기록 zip 에 챔선·게임 단계 기록이 남았는지.
 
-사용: python scripts/e2e_fake_client.py <data_dir(개인 경기·통계 있는 곳)> <game_id(개인 DB에 있는 경기 번호)>
+사용: python scripts/e2e_fake_client.py <data_dir> <game_id> [keyless]
+keyless: API 키·내 경기 DB 없이 → 게임이 끝나면 클라이언트 전적에서 받아 복기하는지 확인
 성공하면 0, 실패하면 1 로 끝난다.
 """
 import asyncio
@@ -27,6 +28,9 @@ from fastapi.responses import JSONResponse
 ROOT = Path(__file__).resolve().parents[1]
 SAMPLE = ROOT / "samples" / "champselect_ranked_jungle.jsonl"
 PASSWORD = "fakepass"
+
+
+FIXTURE = ROOT / "tests" / "fixtures" / "match1.json.gz"
 
 
 def fake_lcu(game_id: int) -> tuple[FastAPI, dict]:
@@ -82,9 +86,27 @@ def fake_lcu(game_id: int) -> tuple[FastAPI, dict]:
                                 "scores": {"creepScore": int(gt / 8), "kills": 0, "deaths": 0, "assists": 0}}],
                 "gameData": {"gameTime": gt}, "events": {"Events": []}}
 
+    # 키 없는 복기: 클라이언트 전적 API (고정 경기를 구형 v4 모양으로)
+    import gzip
+
+    sys.path.insert(0, str(ROOT / "tests"))
+    from lcu_history_fixture import v5_to_lcu
+
+    fx = json.load(gzip.open(FIXTURE, "rt", encoding="utf-8"))
+    hist_game, hist_tl = v5_to_lcu(fx["match"], fx["timeline"])
+    me = next(p for p in fx["match"]["info"]["participants"] if p["teamPosition"] == "JUNGLE")
+
     @app.get("/lol-summoner/v1/current-summoner")
     async def summoner():
-        return {"gameName": "fake", "tagLine": "KR1"}
+        return {"gameName": "fake", "tagLine": "KR1", "puuid": me["puuid"]}
+
+    @app.get("/lol-match-history/v1/games/{gid}")
+    async def hist(gid: int):
+        return hist_game if gid == hist_game["gameId"] else JSONResponse({}, 404)
+
+    @app.get("/lol-match-history/v1/game-timelines/{gid}")
+    async def hist_tl_(gid: int):
+        return hist_tl if gid == hist_game["gameId"] else JSONResponse({}, 404)
 
     return app, state
 
@@ -105,7 +127,9 @@ async def main() -> int:
                                         ssl_keyfile=str(work / "k.pem"), ssl_certfile=str(work / "c.pem")))
     lcu_task = asyncio.create_task(lcu.serve())
 
+    keyless = len(sys.argv) > 3 and sys.argv[3] == "keyless"
     env = {**os.environ, "LOLDOSA_DATA_DIR": str(data), "LOLDOSA_LOCKFILE": str(work / "lockfile"),
+           **({"RIOT_API_KEY": ""} if keyless else {}),
            "LOLDOSA_LIVE_URL": f"https://127.0.0.1:{lport}/liveclientdata/allgamedata"}
     app = subprocess.Popen([sys.executable, "-m", "loldosa.cli", "app", "--browser", "--no-ai", "--port", str(aport)],
                            env=env, cwd=ROOT, stdout=open(work / "app.log", "w"), stderr=subprocess.STDOUT)
