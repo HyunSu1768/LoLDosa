@@ -1,3 +1,4 @@
+from pathlib import Path
 import json
 
 import httpx
@@ -33,7 +34,8 @@ def test_install_dir_from_cmdline():
     args = ["LeagueClientUx.exe", "--app-port=1", r"--install-directory=C:\Riot Games\League of Legends", "--x=1"]
     assert str(gr._install_dir_from_cmdline(args)) == r"C:\Riot Games\League of Legends"
     split = ["LeagueClientUx", "--install-directory=/Applications/League", "of", "Legends.app/Contents/LoL", "--y"]
-    assert str(gr._install_dir_from_cmdline(split)) == "/Applications/League of Legends.app/Contents/LoL"
+    # 경로 구분자는 OS 마다 달라서 Path 끼리 비교한다 (Windows CI 에서 문자열 비교가 깨졌음)
+    assert gr._install_dir_from_cmdline(split) == Path("/Applications/League of Legends.app/Contents/LoL")
     assert gr._install_dir_from_cmdline(["LeagueClientUx.exe"]) is None
 
 
