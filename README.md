@@ -82,6 +82,8 @@ uv run pytest
 | `collect` | 경기·타임라인 수집 (`--bucket apex platinum`, `--max-matches`, `--days`) |
 | `pro sync` | Leaguepedia 프로 대회 정글 기록 (`--days 90`) |
 | `analyze` | 수집 데이터 → 통계 DB |
+| `reprocess` | 보관된 원본으로 경기 테이블 재생성 (저장 항목이 늘어난 업데이트 후 1회) |
+| `ai check` | Claude Code 구독 호출 확인 |
 | `update` | 위 과정을 한 번에 |
 | `app` | 브리핑 앱 |
 | `guides search/add/add-text/list` | 전문가 가이드 지식 베이스 |
