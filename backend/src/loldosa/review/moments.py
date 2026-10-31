@@ -5,6 +5,7 @@ from __future__ import annotations
 from ..analysis.decisions import (ACTION_CONCEPTS, ACTION_KO, ACTIONS, classify_action, load_match,
                                   outcome, similar, state_vector, summarize)
 from ..analysis.geometry import relative_region
+from ..analysis.items import can_buy, gold_as_items, gold_diff_say, prices as item_prices
 from ..analysis.turns import shop_visits
 from ..briefing.engine import josa, mmss, signed
 from ..ddragon import ChampionIndex
@@ -49,6 +50,12 @@ def pick_minutes(md, pid: int, epid: int, team: int) -> list[tuple[int, str, int
     return sorted(picked)
 
 
+def _prices() -> dict:
+    from ..config import load_settings
+
+    return item_prices(str(load_settings().data_dir))
+
+
 def snapshot(md, champs: ChampionIndex, pid: int, epid: int, team: int, m: int, st: dict) -> dict:
     units = []
     for q, p in md.parts.items():
@@ -70,15 +77,32 @@ def snapshot(md, champs: ChampionIndex, pid: int, epid: int, team: int, m: int, 
     elif st["to_herald"] < 999:
         objs.append({"name": "전령", "x": PIT["baron"][0], "y": PIT["baron"][1],
                      "text": "지금 있어요" if st["to_herald"] == 0 else f"{mmss(st['to_herald'])} 뒤"})
-    facts = [
-        f"내 위치: {REGION_KO.get(st['region'], st['region'])} · 체력 {round(st['hp'] * 100)}% · 가진 골드 {int(st['gold']):,}",
-        f"상대 정글과: 레벨 {signed(st['level_diff'])} · 골드 {signed(st['gold_diff'])} · 상대 정글 실제 위치는 {'탑' if st['enemy_side_top'] else '봇'} 쪽(그때 보였는지는 시야에 따라 달라요)",
-        f"라인 골드 차이(우리-상대): 탑 {signed(st['lane_top'])} · 미드 {signed(st['lane_mid'])} · 봇 {signed(st['lane_bot'])}",
+    p = _prices()
+    lvl = st["level_diff"]
+    lanes_say = {k: gold_diff_say(st[f"lane_{k}"], p) for k in ("top", "mid", "bot")}
+    facts = [  # 골드는 숫자 대신 아이템으로: 게임 중엔 몇 골드인지 계산할 수 없어서
+        f"나: {REGION_KO.get(st['region'], st['region'])}에 있어요 · 체력 {round(st['hp'] * 100)}% · "
+        f"가진 골드로 {can_buy(st['gold'], p)}",
+        f"상대 정글과: 레벨 {'같아요' if not lvl else f'내가 {abs(lvl)} 높아요' if lvl > 0 else f'내가 {abs(lvl)} 낮아요'} · "
+        f"골드 {gold_diff_say(st['gold_diff'], p, us='내')}",
+        f"상대 정글은 실제로 {'탑' if st['enemy_side_top'] else '봇'} 쪽에 있었어요 (그때 보였는지는 시야에 따라 달라요)",
+        "라인: " + " · ".join(f"{n} {lanes_say[k]}" for k, n in (("top", "탑"), ("mid", "미드"), ("bot", "봇"))),
         "오브젝트: " + (", ".join(f"{o['name']} {o['text']}" for o in objs) if objs else "당분간 없어요")
         + (f" · 용 개수 차이 {signed(st['dragon_diff'])}" if st["dragon_diff"] else ""),
     ]
     lanes = {"top": st["lane_top"], "mid": st["lane_mid"], "bot": st["lane_bot"]}
-    return {"units": units, "objectives": objs, "facts": facts, "team": team, "minute": m, "lanes": lanes}
+    lane_items = {k: {**gold_as_items(st[f"lane_{k}"], p), "say": lanes_say[k], "ahead": st[f"lane_{k}"] > 0} for k in lanes}
+    return {"units": units, "objectives": objs, "facts": facts, "team": team, "minute": m, "lanes": lanes, "lane_items": lane_items}
+
+
+def swing_say(v, p) -> str:
+    """2분 뒤 팀 골드 변화 → '팀이 롱소드 1개쯤 벌어요' / '팀이 롱소드 1개쯤 잃어요'."""
+    if v is None:
+        return "-"
+    it = gold_as_items(v, p)
+    if not it["count"]:
+        return "팀 골드 그대로"
+    return f"팀이 {it['text']} {'벌어요' if v > 0 else '잃어요'}"
 
 
 def build_moments(con, stats, champs: ChampionIndex, match_id: str, puuid: str) -> list[dict]:
@@ -105,6 +129,9 @@ def build_moments(con, stats, champs: ChampionIndex, match_id: str, puuid: str) 
         pool = [r for r in pool if r.get("match_id") != match_id]  # 같은 경기는 비교 대상에서 뺀다
         neigh = similar(pool, st, k=60)
         crowd = summarize(neigh)
+        pr = _prices()
+        for c in crowd:
+            c["swing_say"] = swing_say(c.get("swing"), pr)
         top = [c["action"] for c in crowd[:3]]
         choices = [a for a in ACTIONS if a in set(top + [mine]) or a in ("recall", "farm")][:6]
         good = [c["action"] for c in crowd if c["share"] >= GOOD_SHARE]
@@ -122,7 +149,8 @@ def build_moments(con, stats, champs: ChampionIndex, match_id: str, puuid: str) 
             "minute": m, "t": m * 60, "reason": why,
             "snapshot": snapshot(md, champs, me, epid, team, m, st),
             "choices": [{"action": a, "label": ACTION_KO[a]} for a in choices],
-            "mine": {"action": mine, "label": ACTION_KO[mine], "swing": res["swing"], "died": res["died"], "obj": res["obj"]},
+            "mine": {"action": mine, "label": ACTION_KO[mine], "swing": res["swing"], "swing_say": swing_say(res["swing"], pr),
+                     "died": res["died"], "obj": res["obj"]},
             "crowd": crowd, "k": len(neigh), "pool_label": label, "good": good, "verdict": verdict,
             "concepts": list(dict.fromkeys(ACTION_CONCEPTS[mine] + (ACTION_CONCEPTS[best["action"]] if best else []))),
         })

@@ -34,7 +34,7 @@ export async function startSrs(after) {
     } else {
       const mo = it.moment;
       sh.innerHTML = `${head}<h2 class="num">${mo.minute}:00 · ${esc(mo.reason)}</h2>
-        <div class="mo-grid">${board(mo.snapshot, 260)}<div><ul class="plain">${mo.snapshot.facts.map((f) => `<li>${linkify(f)}</li>`).join("")}</ul>
+        <div class="mo-grid">${board(mo.snapshot, 340)}<div><ul class="plain">${mo.snapshot.facts.filter((f) => !f.startsWith("라인:")).map((f) => `<li>${linkify(f)}</li>`).join("")}</ul>
         <div class="title" style="margin:12px 0 8px">여기서 뭐 할래요?</div>
         <div class="choices">${mo.choices.map((c) => `<button class="choice" data-a="${c.action}">${esc(c.label)}</button>`).join("")}</div>
         <div class="reveal"></div></div></div>`;

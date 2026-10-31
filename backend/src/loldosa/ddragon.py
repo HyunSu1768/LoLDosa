@@ -91,6 +91,14 @@ async def sync_champions(data_dir: Path, locale: str = "ko_KR", version: str | N
             resp.raise_for_status()
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(resp.text, encoding="utf-8")
+        ipath = path.parent / f"item.{locale}.json"  # 골드를 아이템으로 말할 때 쓰는 가격표
+        if not ipath.exists():
+            try:
+                r = await http.get(f"{BASE}/cdn/{version}/data/{locale}/item.json")
+                r.raise_for_status()
+                ipath.write_text(r.text, encoding="utf-8")
+            except httpx.HTTPError:
+                pass
     return load_cached(data_dir, locale, version)
 
 

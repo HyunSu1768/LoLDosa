@@ -101,3 +101,25 @@ label.row { cursor: pointer; }
   .brief-grid { grid-template-columns: 1fr; } .teams { position: static; }
   .mo-grid, .moment .mo-grid { grid-template-columns: 1fr; } .tl-grid { grid-template-columns: 1fr; }
 }
+
+/* ---------- 미니맵 (실제 롤 UI 처럼) ---------- */
+:root { --mm-me: #f0c75e; --mm-ally: #3b8cff; --mm-enemy: #e84057; }
+.minimap-wrap { margin: 0; }
+svg.minimap { width: 100%; height: auto; display: block; border-radius: 4px; background: #0b1a14; }
+.mm-tag rect { fill: rgba(0, 0, 0, .78); }
+.mm-tag text { font: 700 12px var(--font); fill: #fff; }
+.mm-tag.me rect { stroke: var(--mm-me); stroke-width: 1.5; } .mm-tag.ejg rect { stroke: var(--mm-enemy); stroke-width: 1.5; }
+.mm-obj rect { fill: rgba(0, 0, 0, .75); stroke: #c8aa6e; stroke-width: 1; }
+.mm-obj text { font: 700 12px var(--font); fill: #f0e6d2; }
+.minimap-wrap figcaption { margin-top: 8px; }
+.lanes { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 6px; }
+.lanes li { display: grid; grid-template-columns: 36px 1fr auto; gap: 8px; align-items: center; padding: 8px 12px; border-radius: 12px; background: var(--bg-float); font-size: var(--t7); }
+.lanes li b { color: var(--grey900); }
+.lanes li.win span:nth-child(2) { color: var(--green-text); } .lanes li.lose span:nth-child(2) { color: var(--red-text); } .lanes li.even span:nth-child(2) { color: var(--grey600); }
+.lanes .icons { display: flex; gap: 2px; }
+.mm-item { width: 22px; height: 22px; border-radius: 4px; border: 1px solid #785a28; }
+.moment .mo-grid, .mo-grid { grid-template-columns: 380px 1fr; }
+/* 고수 선택 비율: 1줄 = 행동·막대·비율, 2줄 = 2분 뒤 결과(아이템 말) */
+.crowd { grid-template-columns: 120px 1fr 44px; row-gap: 2px; margin: 10px 0; }
+.crowd > .sub { grid-column: 1 / -1; }
+.crowd .bar { height: 8px; }
