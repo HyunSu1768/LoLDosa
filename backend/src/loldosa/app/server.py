@@ -228,6 +228,22 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
                         "message": "경기 기록이 아직 안 올라왔어요. 조금 뒤 경기 복기 탭에서 불러와 주세요."})
         return None
 
+    async def lcu_me() -> dict:
+        """켜져 있는 롤 클라이언트의 내 계정 {puuid, gameName, tagLine} (없으면 빈 dict)."""
+        from ..lcu.client import LcuClient
+        from ..lcu.connection import find_credentials
+
+        creds = find_credentials()
+        if not creds:
+            return {}
+        lcu = LcuClient(creds)
+        try:
+            return await lcu.current_summoner() or {}
+        except Exception:  # noqa: BLE001
+            return {}
+        finally:
+            await lcu.aclose()
+
     async def lcu_store_games(game_ids: list[int]) -> list[str]:
         """롤 클라이언트 전적 → 개인 경기 DB (키 없이). 내 puuid 도 클라이언트에서 채운다."""
         from ..lcu.client import LcuClient
@@ -508,9 +524,14 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
         from ..riot.client import RiotApiError, RiotClient
 
         review_ready()
-        riot_id = (body.get("riot_id") or user.riot_id).strip()
+        riot_id = (body.get("riot_id") or user.riot_id or "").strip()
+        if not riot_id:  # Riot ID 를 따로 묻지 않는다: 켜져 있는 롤 클라이언트의 내 계정
+            me = await lcu_me()
+            if me.get("puuid"):
+                riot_id = f"{me.get('gameName', '')}#{me.get('tagLine', '')}"
+                user.update({"riot_id": riot_id, "puuid": me["puuid"]}).save(settings.data_dir)
         if not riot_id:
-            raise HTTPException(400, "Riot ID를 입력하세요 (닉네임#태그)")
+            raise HTTPException(400, "내 계정을 찾지 못했어요. 롤 클라이언트를 켠 뒤 다시 눌러 주세요.")
         try:
             async with personal_lock:
                 async with RiotClient(settings.riot_api_key, settings.platform, settings.region) as riot:

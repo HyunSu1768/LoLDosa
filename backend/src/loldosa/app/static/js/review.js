@@ -6,27 +6,38 @@ import { $, $$, api, badge, champImg, champKey, champName, empty, ensureChamps, 
 import { fmtDate } from "./home.js";
 
 /* ---------- 경기 불러오기: 3단계 진행 (R5) ---------- */
-export async function startSync({ onDone } = {}) {
+export async function startSync({ onDone, riotId = "" } = {}) {
   const steps = ["경기 불러오는 중", "분석하는 중", "다 됐어요"];
   const sh = openSheet(`<h2>최근 경기를 가져올게요</h2><ol class="steps3">${steps.map((s, i) => `<li data-i="${i}">${s}</li>`).join("")}</ol>
-    <p class="sub" id="sync-msg">롤 클라이언트가 켜져 있으면 API 키 없이 가져와요.</p>`);
+    <p class="sub" id="sync-msg">솔랭·자랭·일반 협곡 게임을 가져와요.</p>`);
   const mark = (i) => $$(".steps3 li", sh).forEach((li) => { li.classList.toggle("on", +li.dataset.i === i); li.classList.toggle("done", +li.dataset.i < i); });
   mark(0);
-  try {
-    const key = await api("/api/riot-key").catch(() => ({ set: false }));
-    const t = setTimeout(() => mark(1), 2500);
-    const list = key.set && !key.problem ? await post("/api/review/sync", { count: 20 }) : await post("/api/review/sync-lcu", { count: 20 });
-    clearTimeout(t); mark(2);
-    $("#sync-msg", sh).textContent = `${list.length}판을 분석했어요.`;
-    setTimeout(() => { closeSheet(); onDone?.(list); }, 700);
-  } catch (e) {
-    // S2: 상황 → 원인 → 한 번에 고치는 버튼
-    sh.innerHTML = `<button class="close" aria-label="닫기" data-close>✕</button><h2>경기를 가져오지 못했어요</h2>
-      <p class="body">${esc(e.message)}</p>
-      <p class="sub">롤 클라이언트를 켜고 다시 시도하거나, 설정에서 Riot API 키를 넣으면 클라이언트 없이도 가져올 수 있어요.</p>
-      <div class="btn-row end"><a class="btn grey m" href="#/settings" data-close>키 넣으러 가기</a><button class="btn fill m" id="retry">다시 가져오기</button></div>`;
-    $("#retry", sh).onclick = () => startSync({ onDone });
+  const errors = [];
+  let list = null;
+  const t = setTimeout(() => mark(1), 2500);
+  const key = await api("/api/riot-key").catch(() => ({ set: false }));
+  // 1) 키가 있으면 Riot API (Riot ID 가 없으면 서버가 롤 클라이언트에서 내 계정을 읽음) → 2) 실패하면 롤 클라이언트 전적
+  if (key.set && !key.problem) {
+    try { list = await post("/api/review/sync", { count: 20, riot_id: riotId }); } catch (e) { errors.push(e.message); }
   }
+  if (!list) {
+    try { list = await post("/api/review/sync-lcu", { count: 20 }); } catch (e) { errors.push(e.message); }
+  }
+  clearTimeout(t);
+  if (list) {
+    mark(2);
+    $("#sync-msg", sh).textContent = list.length ? `${list.length}판을 가져왔어요.` : "최근 협곡 게임이 없어요. 한 판 하고 다시 눌러 주세요.";
+    setTimeout(() => { closeSheet(); onDone?.(list); }, list.length ? 700 : 1800);
+    return;
+  }
+  // S2: 상황 → 원인 → 한 번에 고치는 방법 (Riot ID 로 직접 찾기)
+  sh.innerHTML = `<button class="close" aria-label="닫기" data-close>✕</button><h2>경기를 가져오지 못했어요</h2>
+    <p class="body">${esc(errors[errors.length - 1] || "")}</p>
+    ${key.set && !key.problem ? `<p class="sub">롤 클라이언트를 못 찾았다면 Riot ID로 직접 찾을 수 있어요. PC방이라면 LoLDosa를 관리자 권한으로 실행하면 클라이언트가 잡힐 수 있어요.</p>
+      <div class="field" style="margin-top:12px"><label for="rid">내 Riot ID</label><input class="input" id="rid" placeholder="닉네임#태그"></div>`
+      : `<p class="sub">롤 클라이언트를 켠 뒤 다시 눌러 주세요. PC방이라면 LoLDosa를 관리자 권한으로 실행해 보세요. 설정에서 Riot API 키를 넣으면 Riot ID로도 가져올 수 있어요.</p>`}
+    <div class="btn-row end"><button class="btn grey m" data-close>닫기</button><button class="btn fill m" id="retry">${key.set && !key.problem ? "이 계정으로 가져오기" : "다시 가져오기"}</button></div>`;
+  $("#retry", sh).onclick = () => startSync({ onDone, riotId: $("#rid", sh)?.value.trim() || "" });
 }
 
 /* ---------- 목록 ---------- */

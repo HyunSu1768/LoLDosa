@@ -123,9 +123,11 @@ class RiotClient:
     # ---- match (리전 라우팅: asia) ----------------------------------------
 
     async def match_ids(
-        self, puuid: str, queue: int = 420, count: int = 20, start_time: int | None = None
+        self, puuid: str, queue: int | None = 420, count: int = 20, start_time: int | None = None
     ) -> list[str]:
-        params: dict[str, Any] = {"queue": queue, "count": count}
+        params: dict[str, Any] = {"count": count}
+        if queue is not None:
+            params["queue"] = queue
         if start_time is not None:
             params["startTime"] = start_time
         path = f"/lol/match/v5/matches/by-puuid/{puuid}/ids"

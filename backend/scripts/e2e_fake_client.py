@@ -100,6 +100,11 @@ def fake_lcu(game_id: int) -> tuple[FastAPI, dict]:
     async def summoner():
         return {"gameName": "fake", "tagLine": "KR1", "puuid": me["puuid"]}
 
+    @app.get("/lol-match-history/v1/products/lol/current-summoner/matches")
+    async def hist_list():
+        # 칼바람(450) 한 판을 섞어 둔다: 복기 목록에선 빠져야 한다
+        return {"games": {"games": [{"gameId": hist_game["gameId"], "queueId": 440}, {"gameId": 1, "queueId": 450}]}}
+
     @app.get("/lol-match-history/v1/games/{gid}")
     async def hist(gid: int):
         return hist_game if gid == hist_game["gameId"] else JSONResponse({}, 404)
@@ -173,7 +178,10 @@ async def main() -> int:
                     got["postgame"] = msg
                 elif msg["type"] == "error":
                     got["errors"].append(msg)
-        async with httpx.AsyncClient() as http:
+        async with httpx.AsyncClient(timeout=60) as http:
+            # '경기 불러오기' 버튼 흐름: 키 없이 클라이언트 전적 → 목록
+            r = await http.post(f"http://127.0.0.1:{aport}/api/review/sync-lcu", json={"count": 20})
+            got["synced"] = [g["match_id"] for g in r.json()] if r.status_code == 200 else r.text
             z = zipfile.ZipFile(io.BytesIO((await http.get(f"http://127.0.0.1:{aport}/api/diagnostics")).content))
             got["diagnostics"] = z.namelist()
     finally:
@@ -194,10 +202,11 @@ async def main() -> int:
         "진단 기록(게임 단계)": any(n.startswith("gameflow_") for n in got.get("diagnostics", [])),
         "게임 중 초 단위 기록 → 복기 반영": bool((pg.get("live") or {}).get("levels")),
         "오류 메시지 없음": not got["errors"],
+        "경기 불러오기(클라이언트 전적) → 목록에 나옴": isinstance(got.get("synced"), list) and len(got["synced"]) >= 1,
     }
     print(json.dumps({"stages": got["stages"], "postgame": {k: pg.get(k) for k in ("status", "match_id", "champion")},
                       "lesson": (pg.get("lesson") or {}).get("title"), "gap": (pg.get("gap") or {}).get("label"), "live": pg.get("live"),
-                      "diagnostics": got.get("diagnostics"), "lcu_calls": lstate["calls"]}, ensure_ascii=False, indent=1))
+                      "diagnostics": got.get("diagnostics"), "lcu_calls": lstate["calls"], "synced": got.get("synced")}, ensure_ascii=False, indent=1))
     for k, v in checks.items():
         print(("✅ " if v else "❌ ") + k)
     if not all(checks.values()):

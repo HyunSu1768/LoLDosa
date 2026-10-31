@@ -72,10 +72,14 @@ def to_v5(game: dict, timeline: dict | None, platform: str = "KR") -> tuple[dict
     return match, tl
 
 
-async def recent_game_ids(lcu, count: int = 20, queue: int = 420) -> list[int]:
+async def recent_game_ids(lcu, count: int = 20, queues: set[int] | None = None) -> list[int]:
+    """최근 경기 id. 기본은 협곡 5:5 전부 (일반·솔랭·자랭·빠른 대전)."""
+    from ..review.sync import SR_QUEUES
+
+    queues = SR_QUEUES if queues is None else queues
     data = await lcu.get(f"/lol-match-history/v1/products/lol/current-summoner/matches?begIndex=0&endIndex={count}")
     games = ((data or {}).get("games") or {}).get("games", [])
-    return [g["gameId"] for g in games if not queue or g.get("queueId") == queue]
+    return [g["gameId"] for g in games if not queues or g.get("queueId") in queues]
 
 
 async def fetch(lcu, game_id: int, platform: str = "KR", diag_dir=None) -> tuple[dict, dict] | None:

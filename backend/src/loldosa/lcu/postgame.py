@@ -23,7 +23,7 @@ from .connection import find_credentials
 log = logging.getLogger(__name__)
 
 IN_GAME = {"InProgress", "Reconnect"}
-SOLO_QUEUES = {420}
+SOLO_QUEUES = {400, 420, 430, 440, 490}  # 협곡 5:5 전부 (일반 게임도 자동 복기)
 
 
 @dataclass

@@ -9,6 +9,8 @@ from ..riot.client import RiotClient
 from ..store.matches import MatchStore
 
 PERSONAL_DB = "personal.duckdb"
+# 복기 대상: 소환사의 협곡 5:5 (일반 400·비공개 선택 430·솔랭 420·자랭 440·빠른 대전 490). 칼바람 등은 뺀다.
+SR_QUEUES = {400, 420, 430, 440, 490}
 
 
 def split_riot_id(riot_id: str) -> tuple[str, str]:
@@ -27,12 +29,16 @@ async def resolve_puuid(riot: RiotClient, riot_id: str) -> str:
 
 
 async def sync_personal(riot: RiotClient, store: MatchStore, puuid: str, count: int = 10,
-                        queue: int = 420, say=print) -> list[str]:
+                        queue: int | None = None, say=print) -> list[str]:
+    """queue 를 안 주면 협곡 게임 전부 (솔랭만 하던 예전 방식은 일반·자랭을 놓쳤다)."""
     ids = await riot.match_ids(puuid, queue=queue, count=count)
     new = [m for m in ids if not store.has_match(m)]
     for i, mid in enumerate(new, 1):
-        match, timeline = await riot.match(mid), await riot.timeline(mid)
-        if match and timeline:
+        match = await riot.match(mid)
+        if not match or (queue is None and match["info"].get("queueId") not in SR_QUEUES):
+            continue  # 칼바람 등: 타임라인까지 받지 않는다
+        timeline = await riot.timeline(mid)
+        if timeline:
             store.save_raw(mid, match, timeline)
             store.ingest(match, timeline, "personal")
         say(f"  {i}/{len(new)} {mid}")
