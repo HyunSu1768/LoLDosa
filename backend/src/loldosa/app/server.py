@@ -211,6 +211,33 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
         await hub.send(msg)
         return msg
 
+    @app.get("/api/riot-key")
+    async def riot_key_status():
+        from ..config import key_problem
+
+        k = settings.riot_api_key
+        return {"set": bool(k), "problem": key_problem(k) if k else "키가 없어요",
+                "masked": f"{k[:10]}…{k[-4:]}" if k else None}
+
+    @app.put("/api/riot-key")
+    async def riot_key_save(body: dict = Body(...)):
+        """설정 화면에서 키 입력 → 형식 확인 → 실제로 Riot에 한 번 물어보고 → .env 에 저장."""
+        from ..config import clean_key, key_problem, save_api_key
+        from ..riot.client import RiotApiError, RiotClient
+
+        key = clean_key(body.get("key", ""))
+        if problem := key_problem(key):
+            raise HTTPException(400, problem)
+        try:
+            async with RiotClient(key, settings.platform, settings.region) as riot:
+                await riot.apex_league("challenger")
+        except RiotApiError as e:
+            raise HTTPException(400, "Riot이 이 키를 거부했어요. 개발용 키는 24시간마다 만료돼요." if e.status in (401, 403)
+                                else f"Riot 응답 오류: {e}")
+        save_api_key(key, settings.env_path)
+        object.__setattr__(settings, "riot_api_key", key)
+        return {"ok": True, "masked": f"{key[:10]}…{key[-4:]}"}
+
     @app.get("/api/diagnostics")
     async def diagnostics():
         """진단 기록 묶음(zip): 실제 클라이언트에서 문제가 생기면 이 파일 하나를 보내 주면 돼요."""

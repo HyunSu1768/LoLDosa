@@ -58,3 +58,21 @@ def load_settings() -> Settings:
         locale=os.getenv("LOLDOSA_LOCALE", "ko_KR"),
         data_dir=data_dir,
     )
+
+
+def save_api_key(key: str, env_path: Path | None = None) -> Path:
+    """설정 화면에서 받은 키를 .env 에 저장 (다른 줄은 그대로 둔다)."""
+    path = env_path or (REPO_ROOT / ".env")
+    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    out, done = [], False
+    for line in lines:
+        if line.strip().startswith("RIOT_API_KEY="):
+            out.append(f"RIOT_API_KEY={key}")
+            done = True
+        else:
+            out.append(line)
+    if not done:
+        out.append(f"RIOT_API_KEY={key}")
+    path.write_text("\n".join(out) + "\n", encoding="utf-8")
+    os.environ["RIOT_API_KEY"] = key
+    return path

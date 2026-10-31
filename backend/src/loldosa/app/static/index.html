@@ -124,6 +124,11 @@
 <!-- ============================ 설정 ============================ -->
 <section id="tab-settings" class="tabpane">
   <div class="settings">
+    <div class="field"><label>Riot API 키 <span id="key-state" class="muted"></span></label>
+      <div class="row"><input id="set-key" placeholder="RGAPI-..." autocomplete="off"><button id="save-key" class="ghost">확인 후 저장</button></div>
+      <p class="muted">내 경기를 불러올 때만 필요해요. 게임 전 브리핑은 키 없이도 돼요.
+        <a href="https://developer.riotgames.com" target="_blank">developer.riotgames.com</a>에 롤 계정으로 로그인하면 바로 받을 수 있어요.
+        이 키는 24시간마다 만료되니, 오래 쓰려면 같은 사이트에서 'Personal API Key'를 신청하세요.</p></div>
     <div class="field"><label>내 Riot ID</label><input id="set-riot-id" placeholder="닉네임#태그"><p class="muted">경기 복기에 써요.</p></div>
     <div class="field"><label>비교할 티어 (갱 추천 등)</label>
       <select id="set-bucket"><option value="platinum">플래티넘 (내 티어대)</option><option value="apex">마스터 이상</option></select>
@@ -140,6 +145,9 @@
       <div id="champ-grid" class="champ-grid"></div>
     </div>
     <button id="save-settings" class="primary">저장</button> <span id="settings-status" class="muted"></span>
+    <div class="field" style="margin-top:28px"><label>문제가 생겼을 때</label>
+      <p class="muted">챔피언 선택 화면이 안 잡히거나 자동 복기가 안 되면, 아래 진단 기록을 받아서 보내 주세요. 실제 클라이언트 응답과 게임 단계 기록이 들어 있어요. 비밀번호나 API 키는 들어 있지 않아요.</p>
+      <a class="ghost button-link" href="/api/diagnostics" download>진단 기록 내려받기 (zip)</a></div>
   </div>
 </section>
 

@@ -808,7 +808,24 @@ window.showTab = showTab;
 
 /* ---------------- 설정 ---------------- */
 let pool = new Set();
+async function loadKeyState() {
+  try {
+    const k = await api("/api/riot-key");
+    $("key-state").textContent = k.set && !k.problem ? `· 저장됨 (${k.masked})` : `· ${k.problem || "없음"}`;
+  } catch (e) { /* noop */ }
+}
+document.addEventListener("click", async (ev) => {
+  if (ev.target && ev.target.id === "save-key") {
+    $("key-state").textContent = "· 확인 중…";
+    try {
+      const r = await api("/api/riot-key", { method: "PUT", body: JSON.stringify({ key: $("set-key").value }) });
+      $("key-state").textContent = `· 저장됨 (${r.masked}) ✓`; $("set-key").value = "";
+    } catch (e) { $("key-state").textContent = `· ${e.message}`; }
+  }
+});
+
 async function loadSettings() {
+  loadKeyState();
   await ensureChamps();
   const s = await api("/api/settings");
   $("set-riot-id").value = s.riot_id || "";

@@ -210,9 +210,32 @@ def cmd_update(args) -> int:
 
 def cmd_app(args) -> int:
     from .app.desktop import run
+    from .bundle import ensure_ready
+
+    if not args.replay:
+        s = load_settings()
+        ensure_ready(s.data_dir, s.locale, say=_print)
 
     run(replay=Path(args.replay) if args.replay else None, port=args.port, browser=args.browser,
         ai=not args.no_ai, replay_interval=args.interval)
+    return 0
+
+
+def cmd_bundle_export(args) -> int:
+    from .bundle import export
+
+    s = load_settings()
+    m = export(s.data_dir, Path(args.out))
+    _print(f"통계 묶음 → {args.out}: {m}")
+    return 0
+
+
+def cmd_bundle_install(args) -> int:
+    from .bundle import install
+
+    s = load_settings()
+    m = install(s.data_dir, force=args.force)
+    _print(f"설치함: {m}" if m else "설치할 묶음이 없거나 이미 최신이에요 (직접 만든 통계는 --force 로 덮어쓰기)")
     return 0
 
 
@@ -587,6 +610,14 @@ def build_parser() -> argparse.ArgumentParser:
     app.add_argument("--port", type=int, default=8765)
     app.add_argument("--no-ai", action="store_true", help="Claude 코칭 끄기")
     app.set_defaults(func=cmd_app)
+
+    bd = sub.add_parser("bundle", help="미리 만든 고티어 통계 묶음").add_subparsers(dest="sub", required=True)
+    be = bd.add_parser("export", help="data/stats.duckdb → 묶음 (배포용)")
+    be.add_argument("--out", default=str(Path(__file__).resolve().parents[3] / "bundle"))
+    be.set_defaults(func=cmd_bundle_export)
+    bi = bd.add_parser("install", help="묶음 → data/stats.duckdb")
+    bi.add_argument("--force", action="store_true")
+    bi.set_defaults(func=cmd_bundle_install)
 
     rv = sub.add_parser("review", help="내 최근 경기 리뷰 (닉네임#태그)")
     rv.add_argument("riot_id", nargs="?", help="예: 'Hide on bush#KR1' (생략 시 저장된 값)")
