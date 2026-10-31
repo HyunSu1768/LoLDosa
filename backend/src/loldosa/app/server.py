@@ -196,6 +196,39 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
         out = [{"id": c.id, "name": c.name, "key": c.key, "jungle_games": jungle.get(c.id, 0)} for c in champs.all()]
         return sorted(out, key=lambda c: (-c["jungle_games"], c["name"]))
 
+    # ---- 개념 학습 -----------------------------------------------------------
+
+    from ..learn.library import Progress, load_library
+
+    library = load_library()
+    by_id = {c["id"]: c for c in library.get("concepts", [])}
+    progress = Progress(settings.data_dir)
+
+    @app.get("/api/learn")
+    async def learn_index():
+        items = [{k: c.get(k) for k in ("id", "category", "title", "en", "level", "summary")}
+                 for c in library.get("concepts", [])]
+        return {"version": library.get("version", ""), "categories": library.get("categories", []),
+                "concepts": items, "read": progress.data["read"], "quiz": progress.data["quiz"],
+                "recommended": progress.recommended(library)}
+
+    @app.get("/api/learn/{cid}")
+    async def learn_concept(cid: str):
+        c = by_id.get(cid)
+        if not c:
+            raise HTTPException(404, "없는 개념입니다")
+        progress.mark_read(cid)
+        related = [{"id": r, "title": by_id[r]["title"]} for r in c.get("related", []) if r in by_id]
+        return {**c, "related": related, "quiz_progress": progress.data["quiz"].get(cid),
+                "flagged": len(progress.data["flags"].get(cid, []))}
+
+    @app.post("/api/learn/{cid}/quiz")
+    async def learn_quiz(cid: str, body: dict = Body(...)):
+        if cid not in by_id:
+            raise HTTPException(404, "없는 개념입니다")
+        progress.record_quiz(cid, bool(body.get("correct")))
+        return progress.data["quiz"][cid]
+
     # ---- 경기 리뷰 -----------------------------------------------------------
 
     def review_ready():
@@ -239,7 +272,12 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
         from ..review.analyze import Reviewer
 
         with personal_store() as st:
-            return Reviewer(st, stats, champs).review(match_id, user.puuid).to_dict()
+            rv = Reviewer(st, stats, champs).review(match_id, user.puuid).to_dict()
+        # 리뷰에서 지적된 개념은 '추천 학습'으로 쌓는다
+        progress.flag({c for l in rv["lessons"] for c in l["concepts"] if c in by_id}, match_id)
+        for l in rv["lessons"] + rv["strengths"]:
+            l["concepts"] = [{"id": c, "title": by_id[c]["title"]} for c in l["concepts"] if c in by_id]
+        return rv
 
     @app.get("/api/review/{match_id}")
     async def review_match(match_id: str):

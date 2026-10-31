@@ -12,6 +12,7 @@
   <nav>
     <button class="tab active" data-tab="brief">브리핑</button>
     <button class="tab" data-tab="review">경기 리뷰</button>
+    <button class="tab" data-tab="learn">개념 학습</button>
     <button class="tab" data-tab="settings">설정</button>
   </nav>
   <div class="pills">
@@ -83,6 +84,20 @@
     <ul id="match-list" class="match-list"></ul>
     <div id="review-detail" class="review-detail">
       <div class="empty small"><p>왼쪽에서 경기를 고르면 리뷰가 나와요.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 개념 학습 ============================ -->
+<section id="tab-learn" class="tabpane">
+  <div class="learn">
+    <aside class="learn-side">
+      <input id="learn-search" placeholder="개념 검색 (예: 프리징, 트래킹)">
+      <div id="learn-reco"></div>
+      <div id="learn-list"></div>
+    </aside>
+    <div id="learn-detail" class="learn-detail">
+      <div class="empty small"><h2>롤 개념 학습</h2><p>왼쪽에서 개념을 고르세요. 경기 리뷰에서 지적된 개념은 '추천 학습'에 모여요.</p></div>
     </div>
   </div>
 </section>

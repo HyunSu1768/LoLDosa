@@ -48,6 +48,7 @@ class PlanLine:
     title: str  # 시작 / 첫 갱 / 주의 / 오브젝트 / 운영
     text: str  # 쉬운 말 한두 문장
     evidence: list[str] = field(default_factory=list)
+    concepts: list[str] = field(default_factory=list)  # 학습 탭 개념 id
 
 
 @dataclass

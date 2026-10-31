@@ -763,6 +763,8 @@ class BriefingEngine:
             text = ("적이 후반형 → 오브젝트로 격차 벌려서 25분 전후에 끝내기" if sc["who"] == "enemy"
                     else "우리가 후반형 → 초반 손해만 피하고 오브젝트 교환으로 시간 벌기")
             plan.append(PlanLine("운영", text, [sc["eid"]]))
+        for line in plan:
+            line.concepts = PLAN_CONCEPTS.get(line.title, [])
         return plan
 
     def card_insights(self, champ: int, enemy_jg: int) -> Card:
@@ -828,5 +830,10 @@ CLEAR_KO = {"full_clear": "6캠프(풀클리어)", "partial": "4~5캠프", "thre
 
 PROFILE_KO = {"ad_heavy": "AD 위주", "ap_heavy": "AP 위주", "balanced": "AD/AP 균형", "unknown": "알 수 없음"}
 DUR_ORDER = ["<25", "25-30", "30-35", "35+"]
+PLAN_CONCEPTS = {
+    "시작": ["full-clear", "jungle-pathing"], "첫 갱": ["ganking", "lane-priority"],
+    "주의": ["jungle-tracking", "power-spikes"], "오브젝트": ["objective-setup", "lane-priority"],
+    "턴": ["turn-tempo", "recall-timing"], "운영": ["win-condition", "scaling-comp"],
+}
 OBJ_TURN_KO = {"DRAGON": "첫 드래곤", "HORDE": "공허 유충"}
 BAND_KO = {"1-3": "1~3레벨", "4-5": "4~5레벨", "6+": "6레벨 이후"}

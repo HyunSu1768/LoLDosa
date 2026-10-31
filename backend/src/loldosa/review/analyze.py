@@ -56,6 +56,7 @@ class Lesson:
     text: str  # 무엇이 있었고 어떻게 했어야 하는지
     severity: int  # 클수록 중요
     evidence: list[str] = field(default_factory=list)
+    concepts: list[str] = field(default_factory=list)  # 학습 탭 개념 id
 
 
 @dataclass
@@ -163,6 +164,8 @@ class Reviewer:
             rv.notes.append("고티어 기준 통계가 없습니다. `loldosa update` 후 다시 보세요.")
         rv.evidence = self.ev.items
         rv.lessons.sort(key=lambda l: -l.severity)
+        for l in rv.lessons + rv.strengths:
+            l.concepts = lesson_concepts(l.title)
         return rv
 
     # ------------------------------------------------------------------ helpers
@@ -546,3 +549,28 @@ class Reviewer:
 
 
 TURN_OBJ_KO = {"DRAGON": "첫 드래곤", "HORDE": "공허 유충"}
+
+
+# 피드백 제목 키워드 → 학습 개념 (먼저 맞는 것부터)
+LESSON_CONCEPTS = [
+    ("직전에 귀환", ["recall-timing", "turn-tempo", "objective-setup"]),
+    ("귀환 턴", ["recall-timing", "turn-tempo", "objective-setup"]),
+    ("골드를 들고", ["recall-timing"]),
+    ("클리어", ["full-clear", "jungle-pathing", "clear-efficiency"]),
+    ("정글 몬스터", ["clear-efficiency", "jungle-pathing"]),
+    ("데스", ["jungle-tracking", "vision-control", "invading"]),
+    ("갱 허용", ["counter-gank", "jungle-tracking", "cross-map"]),
+    ("멀리서 내줌", ["objective-setup", "turn-tempo", "cross-map"]),
+    ("레벨 구간", ["power-spikes"]),
+    ("시야", ["vision-control"]),
+    ("격차", ["ganking", "clear-efficiency"]),
+    ("풀클리어", ["full-clear"]),
+    ("획득", ["objective-setup"]),
+]
+
+
+def lesson_concepts(title: str) -> list[str]:
+    for key, ids in LESSON_CONCEPTS:
+        if key in title:
+            return ids
+    return []

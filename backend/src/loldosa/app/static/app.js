@@ -16,7 +16,9 @@ document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () 
   document.querySelectorAll(".tabpane").forEach((p) => p.classList.toggle("active", p.id === `tab-${b.dataset.tab}`));
   if (b.dataset.tab === "review") loadMatches();
   if (b.dataset.tab === "settings") loadSettings();
+  if (b.dataset.tab === "learn") loadLearn();
 }));
+function switchTab(name) { document.querySelector(`.tab[data-tab=${name}]`).click(); }
 const showEv = $("show-ev");
 showEv.checked = localStorage.getItem("showEv") === "1";
 document.body.classList.toggle("show-ev", showEv.checked);
@@ -72,7 +74,7 @@ function renderPicks(b) {
 function renderPlan(b) {
   $("plan-box").classList.toggle("hidden", !b.plan.length);
   $("plan").innerHTML = b.plan.map((p) => `<li><span class="tag ${p.title === "주의" ? "warn" : ""}">${esc(p.title)}</span>
-      <span class="txt">${esc(p.text)}${evChips(p.evidence)}</span></li>`).join("");
+      <span class="txt">${esc(p.text)}${evChips(p.evidence)}${conceptChips(p.concepts)}</span></li>`).join("");
 }
 
 function renderCards(b) {
@@ -241,7 +243,7 @@ async function openReview(id) {
     const pool = Object.fromEntries(rv.evidence.map((e) => [e.id, e]));
     const sm = rv.summary;
     const lessons = rv.lessons.slice(0, 5).map((l) => `<div class="lesson sev${Math.min(l.severity, 3)}"><h4>${esc(l.title)}</h4>
-        <p>${esc(l.text)}${evChips(l.evidence, pool)}</p></div>`).join("");
+        <p>${esc(l.text)}${evChips(l.evidence, pool)}</p>${conceptChips(l.concepts)}</div>`).join("");
     const strengths = rv.strengths.map((l) => `<span class="strength">✓ ${esc(l.title)}</span>`).join("");
     const metrics = rv.metrics.map((m) => `<tr><td>${esc(m.label)}</td><td class="${m.verdict}">${esc(m.mine)}</td><td>${esc(m.bench)}</td>
         <td>${evChips(m.evidence, pool)}</td></tr>`).join("");
@@ -312,6 +314,96 @@ $("save-settings").onclick = async () => {
   } catch (e) { $("settings-status").textContent = e.message; }
 };
 
+/* ---------------- 개념 학습 ---------------- */
+let learnIndex = null;
+let conceptTitles = {};
+const LEVEL_KO = { basic: "기초", intermediate: "중급", advanced: "심화" };
+
+function conceptChips(list) {
+  if (!list || !list.length) return "";
+  return `<div>${list.map((c) => {
+    const id = typeof c === "string" ? c : c.id;
+    const title = typeof c === "string" ? (conceptTitles[c] || c) : c.title;
+    return `<button class="chip-link" onclick="openConcept('${esc(id)}')">📘 ${esc(title)}</button>`;
+  }).join("")}</div>`;
+}
+
+async function ensureLearn() {
+  if (learnIndex) return learnIndex;
+  learnIndex = await api("/api/learn");
+  conceptTitles = Object.fromEntries(learnIndex.concepts.map((c) => [c.id, c.title]));
+  return learnIndex;
+}
+
+async function loadLearn(refresh = true) {
+  if (refresh) learnIndex = null;
+  const idx = await ensureLearn();
+  const q = $("learn-search").value.trim().replace(/\s/g, "").toLowerCase();
+  const match = (c) => !q || [c.title, c.en, c.summary, c.id].join(" ").replace(/\s/g, "").toLowerCase().includes(q);
+  $("learn-reco").innerHTML = idx.recommended.length ? `<div class="reco"><h4>추천 학습 · 최근 리뷰에서 지적됨</h4>
+      ${idx.recommended.map((r) => `<div class="learn-item" onclick="openConcept('${esc(r.id)}')">${esc(r.title)}<span class="lv">${r.count}경기</span></div>`).join("")}</div>` : "";
+  $("learn-list").innerHTML = idx.categories.map((cat) => {
+    const items = idx.concepts.filter((c) => c.category === cat.id && match(c));
+    if (!items.length) return "";
+    return `<div class="learn-cat">${esc(cat.name)}</div>` + items.map((c) => {
+      const qz = idx.quiz[c.id];
+      const dot = qz && qz.total && qz.correct / qz.total >= 0.8 ? "done" : idx.read[c.id] ? "read" : "";
+      return `<div class="learn-item" data-id="${esc(c.id)}" onclick="openConcept('${esc(c.id)}')"><span class="dot ${dot}"></span>${esc(c.title)}
+        <span class="lv">${esc(LEVEL_KO[c.level] || c.level || "")}</span></div>`;
+    }).join("");
+  }).join("") || `<p class="muted">개념 데이터가 없습니다.</p>`;
+}
+$("learn-search").oninput = () => loadLearn(false);
+
+function listBlock(title, arr, ordered = false) {
+  if (!arr || !arr.length) return "";
+  const tag = ordered ? "ol" : "ul";
+  return `<h3>${title}</h3><${tag}>${arr.map((x) => `<li>${esc(x)}</li>`).join("")}</${tag}>`;
+}
+
+async function openConcept(id) {
+  if (!document.getElementById("tab-learn").classList.contains("active")) switchTab("learn");
+  await ensureLearn();
+  const c = await api(`/api/learn/${encodeURIComponent(id)}`);
+  document.querySelectorAll("#learn-list .learn-item").forEach((el) => el.classList.toggle("active", el.dataset.id === id));
+  const nums = (c.numbers || []).length ? `<h3>수치 (현재 시즌)</h3><table class="numbers">${c.numbers.map((n) =>
+      `<tr><td>${esc(n.label)}</td><td>${esc(n.value)}</td><td class="note">${esc(n.note || "")}</td></tr>`).join("")}</table>` : "";
+  const quiz = (c.quiz || []).map((q, qi) => `<div class="quiz" data-q="${qi}"><div class="q">Q${qi + 1}. ${esc(q.q)}</div>
+      ${q.choices.map((ch, ci) => `<button class="choice" data-c="${ci}">${esc(ch)}</button>`).join("")}
+      <div class="explain hidden">${esc(q.explain || "")}</div></div>`).join("");
+  $("learn-detail").innerHTML = `
+    <h1>${esc(c.title)}<span class="en">${esc(c.en || "")}</span></h1>
+    <div class="muted">${esc(LEVEL_KO[c.level] || c.level || "")}${c.flagged ? ` · 내 리뷰에서 ${c.flagged}경기 지적됨` : ""}</div>
+    <div class="summary">${esc(c.summary || "")}</div>
+    ${c.definition ? `<h3>정의</h3><p>${esc(c.definition)}</p>` : ""}
+    ${c.why ? `<h3>왜 중요한가</h3><p>${esc(c.why)}</p>` : ""}
+    ${listBlock("어떻게 하나", c.how, true)}
+    ${listBlock("정글러 관점", c.jungler)}
+    ${listBlock("흔한 실수", c.mistakes)}
+    ${nums}
+    ${quiz ? `<h3>확인 퀴즈</h3>${quiz}` : ""}
+    ${(c.related || []).length ? `<h3>관련 개념</h3>${conceptChips(c.related)}` : ""}
+    ${(c.sources || []).length ? `<h3>출처</h3><ul class="sources">${c.sources.map((s) =>
+        `<li>${s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title || s.url)}</a>` : esc(s.title)}${s.note ? ` <span class="muted">(${esc(s.note)})</span>` : ""}</li>`).join("")}</ul>` : ""}`;
+  document.querySelectorAll("#learn-detail .quiz").forEach((box) => {
+    const q = c.quiz[+box.dataset.q];
+    box.querySelectorAll(".choice").forEach((btn) => (btn.onclick = async () => {
+      if (box.dataset.done) return;
+      box.dataset.done = "1";
+      const ok = +btn.dataset.c === q.answer;
+      btn.classList.add(ok ? "right" : "wrong");
+      box.querySelector(`.choice[data-c="${q.answer}"]`).classList.add("right");
+      box.querySelector(".explain").classList.remove("hidden");
+      await api(`/api/learn/${encodeURIComponent(id)}/quiz`, { method: "POST", body: JSON.stringify({ correct: ok }) });
+      learnIndex = null;
+    }));
+  });
+  $("learn-detail").scrollTop = 0;
+  window.scrollTo(0, 0);
+}
+window.openConcept = openConcept;
+
 connect();
 loadStatus();
+ensureLearn().catch(() => {});
 setInterval(loadStatus, 15000);
