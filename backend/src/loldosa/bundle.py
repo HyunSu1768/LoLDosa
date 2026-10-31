@@ -24,7 +24,11 @@ def bundle_dir() -> Path | None:
     cands = []
     if env := os.getenv("LOLDOSA_BUNDLE"):
         cands.append(Path(env))
+    import sys
+
     here = Path(__file__).resolve()
+    if meipass := getattr(sys, "_MEIPASS", None):  # 설치 파일 안에 같이 넣은 묶음
+        cands.append(Path(meipass) / "bundle")
     cands += [here.parent / "bundle_data", here.parents[3] / "bundle"]
     return next((c for c in cands if (c / MANIFEST).exists()), None)
 

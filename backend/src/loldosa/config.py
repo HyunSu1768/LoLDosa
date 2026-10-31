@@ -9,7 +9,20 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+import sys
+
+
+def _home() -> Path:
+    """설정·데이터 위치. 소스 실행이면 저장소 루트, 설치 파일(.exe)이면 사용자 폴더 (LOLDOSA_HOME 로 바꿀 수 있음)."""
+    if env := os.getenv("LOLDOSA_HOME"):
+        return Path(env)
+    if getattr(sys, "frozen", False):
+        base = Path(os.getenv("LOCALAPPDATA") or Path.home() / ".local" / "share")
+        return base / "LoLDosa"
+    return Path(__file__).resolve().parents[3]
+
+
+REPO_ROOT = _home()
 
 
 KEY_RE = re.compile(r"^RGAPI-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")

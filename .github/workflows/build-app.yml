@@ -1,0 +1,56 @@
+name: build-app
+
+# 설치 파일 만들기: Actions 탭에서 'Run workflow' 를 누르거나 v* 태그를 올리면
+# Windows(.zip 안 LoLDosa.exe)·macOS 빌드를 만들어 아티팩트로 올린다.
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          uv sync --extra app --extra dev
+          uv pip install pyinstaller
+      - name: Test
+        run: uv run pytest -q
+      - name: Build
+        shell: bash
+        run: |
+          SEP=":"; [ "$RUNNER_OS" = "Windows" ] && SEP=";"
+          uv run pyinstaller --noconfirm --windowed --name LoLDosa \
+            --collect-data loldosa --collect-submodules loldosa --collect-all webview \
+            --add-data "../bundle${SEP}bundle" \
+            --hidden-import uvicorn.logging --hidden-import uvicorn.protocols.http.auto \
+            --hidden-import uvicorn.protocols.websockets.auto --hidden-import uvicorn.lifespan.on \
+            ../packaging/loldosa_app.py
+      - name: Smoke test (frozen app serves)
+        shell: bash
+        run: |
+          EXE=dist/LoLDosa/LoLDosa; [ "$RUNNER_OS" = "Windows" ] && EXE=dist/LoLDosa/LoLDosa.exe
+          [ "$RUNNER_OS" = "macOS" ] && EXE=dist/LoLDosa.app/Contents/MacOS/LoLDosa
+          export LOLDOSA_HOME="$RUNNER_TEMP/loldosa_home"
+          "$EXE" app --browser --no-ai --port 8799 > smoke.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://127.0.0.1:8799/api/status && break; sleep 2; done
+          curl -sf http://127.0.0.1:8799/api/status
+          cat smoke.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LoLDosa-${{ runner.os }}
+          path: |
+            backend/dist/LoLDosa
+            backend/dist/LoLDosa.app
