@@ -67,7 +67,8 @@ def main():
             pairs = con.execute("SELECT puuid, match_id FROM participants WHERE position='JUNGLE'").fetchall()
             con.close()
         else:
-            pairs = [(pu, m) for pu, ms in json.loads(Path(path).read_text()).items() for m in ms]
+            pairs = [(pu, m) for pu, ms in json.loads(Path(path).read_text()).items()
+                     for m in (ms["matches"] if isinstance(ms, dict) else ms)]
         for pu, mid in pairs:
             if (pu, mid) in seen:
                 continue

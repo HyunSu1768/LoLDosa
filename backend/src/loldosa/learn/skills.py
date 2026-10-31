@@ -158,13 +158,14 @@ def _gap_goal(key):
 for _cid, _key in GAP_CHECKS.items():
     CHECKS[_cid] = (_gap_goal(_key), _gap_check(_key))
 
-# 실제 경기 검증 (research_notes/검증/검증 결과.md): 프로 12명 120판·챌린저 8명 96판·플래티넘 10명 63판.
+# 실제 경기 검증 (research_notes/검증/검증 결과.md): 프로 12명 120판·챌린저 8명 96판·플래티넘 35명 217판.
 # 통과율이 고수 그룹에서 확실히 높은 체크만 채점한다. 나머지는 값만 '참고'로 보여주고 달성률·숙련도엔 안 넣는다.
 VALIDATION = {  # concept: (프로, 챌린저, 플래티넘 통과율, 채점 여부)
-    "full-clear": (0.64, 0.76, 0.43, True),
-    "clear-efficiency": (0.83, 0.94, 0.48, True),
-    "vision-control": (0.78, 0.67, 0.53, True),
-    "recall-timing": (0.57, 0.60, 0.38, True),
+    # 플래티넘 값은 두 표본(63판 + 새로 받은 154판) 합계. 두 표본 모두 같은 방향으로 재현됐다.
+    "full-clear": (0.64, 0.76, 0.42, True),
+    "clear-efficiency": (0.83, 0.94, 0.41, True),
+    "vision-control": (0.78, 0.67, 0.42, True),
+    "recall-timing": (0.57, 0.60, 0.33, True),
     "objective-setup": (0.67, 0.54, 0.51, False),
     "turn-tempo": (0.44, 0.41, 0.38, False),
     "counter-gank": (0.20, 0.23, 0.11, False),

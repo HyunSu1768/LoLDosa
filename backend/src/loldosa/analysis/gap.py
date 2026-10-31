@@ -91,7 +91,8 @@ FEATURES: list[Feature] = [
             "상대 와드 발견하면 핑 찍고 지우기", "{:.1f}"),
 ]
 # 상대 정글과의 차이는 같은 티어끼리 붙은 값이라 티어 비교에 못 쓴다 (마스터+ 끼리는 평균 0). 기준표 검증에서 뺀다.
-RELATIVE = {"gd10", "xpd10", "gd15"}
+# 솔로킬도 상대 실력에 달린 값이라 뺀다 (플래티넘이 오히려 더 많음: 상대가 더 쉽게 잡혀서).
+RELATIVE = {"gd10", "xpd10", "gd15", "solo_kills"}
 BY_KEY = {f.key: f for f in FEATURES}
 
 
