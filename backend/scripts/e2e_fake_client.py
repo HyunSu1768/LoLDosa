@@ -119,7 +119,14 @@ async def main() -> int:
     # 자체 서명 인증서 (실제 LCU 도 Riot 자체 서명 인증서를 쓴다)
     subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", "/CN=127.0.0.1",
                     "-keyout", str(work / "k.pem"), "-out", str(work / "c.pem")], check=True, capture_output=True)
-    lport, aport = 29999, 28796
+    import socket
+
+    def free() -> int:
+        with socket.socket() as so:
+            so.bind(("127.0.0.1", 0))
+            return so.getsockname()[1]
+
+    lport, aport = free(), free()
     (work / "lockfile").write_text(f"LeagueClient:1234:{lport}:{PASSWORD}:https")
 
     lcu_app, lstate = fake_lcu(game_id)
@@ -136,13 +143,20 @@ async def main() -> int:
     got = {"stages": [], "postgame": None, "errors": []}
     try:
         async with httpx.AsyncClient() as http:
-            for _ in range(60):
+            for _ in range(120):
                 try:
                     if (await http.get(f"http://127.0.0.1:{aport}/api/status")).status_code == 200:
                         break
                 except httpx.TransportError:
                     pass
+                if app.poll() is not None:
+                    break
                 await asyncio.sleep(0.5)
+            else:
+                pass
+        if app.poll() is not None:
+            print("앱이 시작하지 못했어요:\n" + (work / "app.log").read_text()[-4000:])
+            return 1
         lstate["t0"] = time.time()  # 앱이 뜬 뒤부터 챔선 시작
         async with websockets.connect(f"ws://127.0.0.1:{aport}/ws") as ws:
             deadline = time.time() + 60
@@ -164,7 +178,10 @@ async def main() -> int:
             got["diagnostics"] = z.namelist()
     finally:
         app.terminate()
-        app.wait(10)
+        try:
+            app.wait(10)
+        except subprocess.TimeoutExpired:
+            app.kill()
         lcu.should_exit = True
         await lcu_task
     pg = got["postgame"] or {}
