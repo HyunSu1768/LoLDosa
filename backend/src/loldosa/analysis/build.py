@@ -58,10 +58,17 @@ CREATE TEMP TABLE camps AS SELECT * FROM (VALUES {camps}) t(team_id, camp, cx, c
 
 -- 시작 캠프(1:00 위치에서 가장 가까운 자기 진영 캠프), 3:00 위치, 이른 갱
 CREATE TEMP TABLE gx AS
-WITH start AS (
-    SELECT f.match_id, f.pid, arg_min(c.camp, (f.x - c.cx) ^ 2 + (f.y - c.cy) ^ 2) AS start_camp
+WITH dist AS (
+    SELECT f.match_id, f.pid, c.camp, sqrt((f.x - c.cx) ^ 2 + (f.y - c.cy) ^ 2) AS d,
+           row_number() OVER (PARTITION BY f.match_id, f.pid ORDER BY (f.x - c.cx) ^ 2 + (f.y - c.cy) ^ 2) AS rk
     FROM gfr f JOIN camps c ON c.team_id = f.team_id
-    WHERE f.minute = 1 GROUP BY ALL
+    WHERE f.minute = 1
+), start AS (
+    -- 1:00 위치가 두 캠프 사이(거리 차 {start_margin} 미만)면 시작 캠프를 단정하지 않는다
+    SELECT a.match_id, a.pid, CASE WHEN b.d - a.d >= {start_margin} THEN a.camp END AS start_camp,
+           map_side(f1.x, f1.y) AS start_side
+    FROM dist a JOIN dist b ON a.match_id = b.match_id AND a.pid = b.pid AND a.rk = 1 AND b.rk = 2
+    JOIN gfr f1 ON f1.match_id = a.match_id AND f1.pid = a.pid AND f1.minute = 1
 ), at3 AS (
     -- 정글 몬스터 CS 는 캠프당 4씩 오른다. 스커틀은 3:30 생성이라 3:00 값은 캠프 수만 반영
     SELECT match_id, pid, rel_region(team_id, x, y) AS route3, map_side(x, y) AS side3,
@@ -70,6 +77,8 @@ WITH start AS (
                 WHEN jungle_cs // 4 >= 4 THEN 'partial'
                 ELSE 'three_or_less' END AS clear3
     FROM gfr WHERE minute = 3
+), at4 AS (
+    SELECT match_id, pid, map_side(x, y) AS side4 FROM gfr WHERE minute = 4
 ), at10 AS (
     SELECT match_id, pid,
            max(gold_diff) FILTER (WHERE minute = 5) AS gd5,
@@ -95,16 +104,17 @@ WITH start AS (
            count(*) FILTER (WHERE ts_ms < 300000 AND reg NOT IN ('top', 'mid', 'bot', 'base')) AS jungle_fights5
     FROM kills GROUP BY ALL
 )
-SELECT g.*, s.start_camp, a.route3, a.side3, a.camps3, a.clear3, t.gd5, t.gd10, t.gd15, t.xpd10,
+SELECT g.*, s.start_camp, s.start_side, a.route3, a.side3, a.camps3, a.clear3, t.gd5, t.gd10, t.gd15, t.xpd10,
        fg.first_gank_ms, fg.first_gank_lane, fg.first_gank_outcome,
        coalesce(ea.takedowns10, 0) AS takedowns10, coalesce(ea.deaths10, 0) AS deaths10,
-       coalesce(ea.jungle_fights5, 0) AS jungle_fights5
+       coalesce(ea.jungle_fights5, 0) AS jungle_fights5, a4.side4
 FROM g
 LEFT JOIN start s USING (match_id, pid)
 LEFT JOIN at3 a USING (match_id, pid)
 LEFT JOIN at10 t USING (match_id, pid)
 LEFT JOIN fg USING (match_id, pid)
-LEFT JOIN early ea USING (match_id, pid);
+LEFT JOIN early ea USING (match_id, pid)
+LEFT JOIN at4 a4 USING (match_id, pid);
 
 -- 경기별 오브젝트
 CREATE TEMP TABLE obj AS
@@ -198,7 +208,8 @@ SELECT sc.scope, sc.bucket, x.champ AS champion_id, x.team_id, x.start_camp,
 FROM gxo x JOIN sc USING (match_id) WHERE start_camp IS NOT NULL GROUP BY ALL""",
 
     "routes": """
-SELECT sc.scope, sc.bucket, x.champ AS champion_id, x.start_camp, x.route3, x.side3, x.clear3,
+SELECT sc.scope, sc.bucket, x.champ AS champion_id, x.team_id, x.start_camp, x.start_side, x.route3, x.side3,
+    x.side4, x.clear3,
     count(*) AS games, sum(win) AS wins, avg(gd10) AS gd10, avg(first_gank_ms) / 1000 AS first_gank_s
 FROM gxo x JOIN sc USING (match_id) WHERE route3 IS NOT NULL GROUP BY ALL""",
 
@@ -276,23 +287,31 @@ JOIN src.frames fo ON fo.match_id = p.match_id AND fo.participant_id = o.partici
 JOIN sc ON sc.match_id = p.match_id
 WHERE p.position IN ('TOP', 'MIDDLE', 'BOTTOM', 'UTILITY') GROUP BY ALL""",
 
-    "gank_targets": """
-WITH ganks AS (
-    SELECT x.match_id, x.team_id, x.first_gank_lane AS lane, (x.first_gank_outcome = 'kill')::INT AS killed,
-        CASE x.first_gank_lane WHEN 'top' THEN 'TOP' WHEN 'mid' THEN 'MIDDLE' ELSE 'BOTTOM' END AS pos
-    FROM gxo x WHERE x.first_gank_ms IS NOT NULL
+    "gank_exposure": """
+-- 라이너 기준: 8분 전 상대 정글이 관여한 킬에 죽은 판 비율 / 우리 정글과 함께 킬을 낸 판 비율.
+-- '킬이 난 갱만 보는' 선택 편향 없이 라이너의 모든 판을 분모로 쓴다.
+WITH lane AS (
+    SELECT p.match_id, p.team_id, p.participant_id AS pid, p.position, p.champion_id,
+           jg.participant_id AS ally_jg, ejg.participant_id AS enemy_jg
+    FROM src.participants p
+    JOIN src.participants jg ON jg.match_id = p.match_id AND jg.team_id = p.team_id AND jg.position = 'JUNGLE'
+    JOIN src.participants ejg ON ejg.match_id = p.match_id AND ejg.team_id <> p.team_id AND ejg.position = 'JUNGLE'
+    WHERE p.position IN ('TOP', 'MIDDLE', 'BOTTOM', 'UTILITY')
+), ev AS (
+    SELECT l.match_id, l.pid,
+        max((e.victim_id = l.pid AND (e.participant_id = l.enemy_jg OR list_contains(e.assists, l.enemy_jg)))::INT) AS died_to_jg,
+        max((e.victim_id <> l.pid AND (e.participant_id = l.pid OR list_contains(e.assists, l.pid))
+             AND (e.participant_id = l.ally_jg OR list_contains(e.assists, l.ally_jg)))::INT) AS kill_with_jg
+    FROM lane l JOIN src.events e ON e.match_id = l.match_id AND e.type = 'CHAMPION_KILL' AND e.ts_ms < 480000
+    GROUP BY ALL
 )
-SELECT sc.scope, sc.bucket, k.lane, CASE WHEN p.team_id = k.team_id THEN 'ally' ELSE 'enemy' END AS rel,
-    p.champion_id, count(*) AS ganks, avg(k.killed) AS kill_rate
-FROM ganks k
-JOIN src.participants p ON p.match_id = k.match_id
-    AND (p.position = k.pos OR (k.lane = 'bot' AND p.position = 'UTILITY'))
-JOIN sc ON sc.match_id = k.match_id GROUP BY ALL""",
+SELECT sc.scope, sc.bucket, l.position, l.champion_id, count(*) AS games,
+    avg(coalesce(ev.died_to_jg, 0)) AS died_to_jg, avg(coalesce(ev.kill_with_jg, 0)) AS kill_with_jg
+FROM lane l LEFT JOIN ev USING (match_id, pid) JOIN sc ON sc.match_id = l.match_id GROUP BY ALL""",
 
-    "gank_lane_base": """
-SELECT sc.scope, sc.bucket, first_gank_lane AS lane, count(*) AS ganks,
-    avg((first_gank_outcome = 'kill')::INT) AS kill_rate, quantile_cont(first_gank_ms, 0.5) / 1000 AS median_s
-FROM gxo x JOIN sc USING (match_id) WHERE first_gank_ms IS NOT NULL GROUP BY ALL""",
+    "side_transition": """
+SELECT sc.scope, sc.bucket, x.clear3, x.start_side, x.side3, x.side4, count(*) AS games
+FROM gxo x JOIN sc USING (match_id) WHERE x.start_side IS NOT NULL GROUP BY ALL""",
 
     "duration_all": """
 SELECT sc.scope, sc.bucket, p.champion_id,
@@ -317,8 +336,33 @@ SELECT count(DISTINCT game_id) AS games, min(played_at) AS since, max(played_at)
 FROM pro.pro_jungle""",
 }
 
-# 아군 4명 평균 AP 성향 기준. Data Dragon 수치 분포를 보고 정한 값
-AD_CUT, AP_CUT = 0.42, 0.58
+# 챔피언 성향: 실제 경기의 피해 데이터로 계산 (표본 10판 미만이면 Data Dragon 수치로 대체)
+# - ap_share: 챔피언에게 준 마법 피해 / (마법 + 물리)
+# - tank_share: 팀 안에서 받은 피해 + 경감한 피해의 비중 (팀 평균 0.2)
+PROFILE_SQL = """
+CREATE TABLE champ_profile AS
+WITH p AS (
+    SELECT champion_id, magic_dmg, physical_dmg,
+        (dmg_taken + self_mitigated)::DOUBLE
+            / nullif(sum(dmg_taken + self_mitigated) OVER (PARTITION BY match_id, team_id), 0) AS tank_share
+    FROM src.participants WHERE magic_dmg IS NOT NULL
+), agg AS (
+    SELECT champion_id, count(*) AS games,
+        sum(magic_dmg)::DOUBLE / nullif(sum(magic_dmg + physical_dmg), 0) AS ap_share, avg(tank_share) AS tank_share
+    FROM p GROUP BY champion_id
+)
+SELECT d.champion_id, coalesce(a.games, 0) AS games,
+    CASE WHEN a.games >= 10 THEN a.ap_share ELSE d.ap_share END AS ap_share,
+    CASE WHEN a.games >= 10 THEN a.tank_share END AS tank_share,
+    CASE WHEN a.games >= 10 THEN a.tank_share >= 0.24 ELSE d.frontline END AS frontline,
+    CASE WHEN a.games >= 10 THEN 'match_data' ELSE 'ddragon' END AS source
+FROM ddragon_meta d LEFT JOIN agg a USING (champion_id);
+CREATE TEMP VIEW champ_meta AS SELECT champion_id, ap_share, frontline FROM champ_profile;
+"""
+START_MARGIN = 300
+
+# 아군 4명 평균 마법 피해 비중 기준. 실제 경기 분포의 3분위(하위 1/3 = AD 위주, 상위 1/3 = AP 위주)
+AD_CUT, AP_CUT = 0.45, 0.54
 
 
 def build_stats(data_dir: Path, champs: ChampionIndex) -> dict[str, int]:
@@ -338,9 +382,10 @@ def build_stats(data_dir: Path, champs: ChampionIndex) -> dict[str, int]:
             "ap_share": [c.ap_share for c in meta],
             "frontline": [c.frontline for c in meta],
         }))
-        con.execute("CREATE TABLE champ_meta AS SELECT * FROM _cm").fetchall()
+        con.execute("CREATE TEMP TABLE ddragon_meta AS SELECT * FROM _cm").fetchall()
         con.unregister("_cm")
-        con.execute(PREP.format(camps=camps_sql_values())).fetchall()
+        con.execute(PROFILE_SQL).fetchall()
+        con.execute(PREP.format(camps=camps_sql_values(), start_margin=START_MARGIN)).fetchall()
 
         counts = {}
         for name, sql in OUTPUTS.items():

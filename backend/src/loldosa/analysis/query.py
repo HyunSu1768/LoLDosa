@@ -221,14 +221,40 @@ class StatsDB:
         return self.one(f"""SELECT games, wins, gd10 FROM lane_matchups
                             WHERE {w} AND position=? AND champion_id=? AND enemy_id=?""", p + [position, champ, enemy])
 
-    def gank_target(self, s: Scope, lane: str, rel: str, champ: int) -> dict | None:
+    def gank_exposure(self, s: Scope, position: str, champ: int) -> dict | None:
         w, p = self._w(s)
-        return self.one(f"""SELECT ganks, kill_rate FROM gank_targets
-                            WHERE {w} AND lane=? AND rel=? AND champion_id=?""", p + [lane, rel, champ])
+        return self.one(f"""SELECT games, died_to_jg, kill_with_jg FROM gank_exposure
+                            WHERE {w} AND position=? AND champion_id=?""", p + [position, champ])
 
-    def gank_lane_base(self, s: Scope) -> dict[str, dict]:
+    def gank_exposure_base(self, s: Scope) -> dict[str, dict]:
         w, p = self._w(s)
-        return {r["lane"]: r for r in self.rows(f"SELECT * FROM gank_lane_base WHERE {w}", p)}
+        return {r["position"]: r for r in self.rows(f"""
+            SELECT position, sum(games) AS games, sum(died_to_jg * games) / sum(games) AS died_to_jg,
+                   sum(kill_with_jg * games) / sum(games) AS kill_with_jg
+            FROM gank_exposure WHERE {w} GROUP BY position""", p)}
+
+    def sides(self, s: Scope, champ: int, team_id: int) -> dict[str, dict[str, int]]:
+        """정글러(챔피언·진영)의 3:00 / 4:00 맵 사이드 분포."""
+        w, p = self._w(s)
+        out: dict[str, dict[str, int]] = {"side3": {}, "side4": {}}
+        for col in out:
+            for r in self.rows(f"""SELECT {col} AS side, sum(games) AS games FROM routes
+                                   WHERE {w} AND champion_id=? AND team_id=? AND {col} IS NOT NULL GROUP BY 1""",
+                               p + [champ, team_id]):
+                out[col][r["side"]] = r["games"]
+        return out
+
+    def side_transition(self, s: Scope) -> list[dict]:
+        w, p = self._w(s)
+        return self.rows(f"""SELECT start_side, side3, side4, sum(games) AS games FROM side_transition
+                             WHERE {w} GROUP BY ALL""", p)
+
+    def profiles(self, champ_ids: list[int]) -> dict[int, dict]:
+        if not champ_ids:
+            return {}
+        q = ",".join("?" * len(champ_ids))
+        return {r["champion_id"]: r for r in self.rows(
+            f"SELECT * FROM champ_profile WHERE champion_id IN ({q})", list(champ_ids))}
 
     def objectives(self, s: Scope) -> dict | None:
         w, p = self._w(s)

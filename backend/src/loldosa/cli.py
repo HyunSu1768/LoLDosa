@@ -182,6 +182,19 @@ def cmd_analyze(_args) -> int:
     return 0
 
 
+def cmd_reprocess(_args) -> int:
+    from .store.matches import MatchStore
+
+    s = load_settings()
+    store = MatchStore(s.data_dir)
+    try:
+        n = store.reprocess(lambda i, t: _print(f"  {i}/{t}"))
+    finally:
+        store.close()
+    _print(f"원본에서 {n}경기 다시 처리 완료 → `loldosa analyze`")
+    return 0
+
+
 def cmd_update(args) -> int:
     """패치/챔피언 갱신 → 수집 → 분석 (하루 한 번 돌리면 되는 전체 파이프라인)."""
     rc = cmd_ddragon_sync(argparse.Namespace(version=None))
@@ -506,6 +519,7 @@ def build_parser() -> argparse.ArgumentParser:
         c.add_argument("--reseed", action="store_true", help="리그 목록을 다시 받아 플레이어 갱신")
 
     sub.add_parser("analyze", help="수집 데이터 → 통계 DB").set_defaults(func=cmd_analyze)
+    sub.add_parser("reprocess", help="보관된 원본으로 경기 테이블 재생성 (업데이트 후 1회)").set_defaults(func=cmd_reprocess)
     up = sub.add_parser("update", help="챔피언 데이터 갱신 + 수집 + 분석 한 번에")
     collect_args(up)
     up.add_argument("--skip-pro", action="store_true", help="프로 대회 데이터 수집 건너뛰기")

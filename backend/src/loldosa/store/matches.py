@@ -45,8 +45,16 @@ CREATE TABLE IF NOT EXISTS participants (
     gold INTEGER, damage_to_champs INTEGER,
     vision_score INTEGER, wards_placed INTEGER, control_wards INTEGER,
     neutral_minions INTEGER, enemy_jungle_minions INTEGER,
+    magic_dmg INTEGER, physical_dmg INTEGER, true_dmg INTEGER,
+    dmg_taken INTEGER, self_mitigated INTEGER,
     PRIMARY KEY (match_id, participant_id)
 );
+-- 이전 버전 DB 마이그레이션 (값은 `loldosa reprocess` 로 원본에서 채움)
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS magic_dmg INTEGER;
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS physical_dmg INTEGER;
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS true_dmg INTEGER;
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS dmg_taken INTEGER;
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS self_mitigated INTEGER;
 CREATE TABLE IF NOT EXISTS bans (
     match_id VARCHAR, team_id INTEGER, pick_turn INTEGER, champion_id INTEGER
 );
@@ -73,7 +81,8 @@ COLUMNS = {
     "participants": ["match_id", "participant_id", "puuid", "team_id", "position", "champion_id", "win",
                      "kills", "deaths", "assists", "spell1", "spell2", "champ_level", "gold",
                      "damage_to_champs", "vision_score", "wards_placed", "control_wards",
-                     "neutral_minions", "enemy_jungle_minions"],
+                     "neutral_minions", "enemy_jungle_minions",
+                     "magic_dmg", "physical_dmg", "true_dmg", "dmg_taken", "self_mitigated"],
     "bans": ["match_id", "team_id", "pick_turn", "champion_id"],
     "frames": ["match_id", "minute", "participant_id", "x", "y", "level", "xp", "total_gold",
                "jungle_cs", "lane_cs"],
@@ -222,6 +231,21 @@ class MatchStore:
             self._x("ROLLBACK")
             raise
 
+    def reprocess(self, progress=None) -> int:
+        """data/raw 의 원본으로 정규화 테이블을 다시 만든다 (스키마가 바뀌었을 때)."""
+        files = sorted(self.raw_dir.glob("*.json.gz")) if self.raw_dir.exists() else []
+        buckets = dict(self._x("SELECT match_id, bucket FROM matches"))
+        n = 0
+        for i, f in enumerate(files, 1):
+            mid = f.name.removesuffix(".json.gz")
+            loaded = self.load_raw(mid)
+            if loaded and mid in buckets:
+                self.ingest(*loaded, buckets[mid])
+                n += 1
+            if progress and i % 100 == 0:
+                progress(i, len(files))
+        return n
+
     def counts(self) -> dict[str, int]:
         out = {t: self._x(f"SELECT count(*) FROM {t}")[0][0]
                for t in ("players", "matches")}
@@ -252,6 +276,8 @@ def normalize(match: dict, timeline: dict, bucket: str) -> dict[str, list]:
             p["totalDamageDealtToChampions"], p.get("visionScore", 0), p.get("wardsPlaced", 0),
             p.get("visionWardsBoughtInGame", 0), p.get("neutralMinionsKilled", 0),
             int(ch.get("enemyJungleMonsterKills", 0) or 0),
+            p.get("magicDamageDealtToChampions", 0), p.get("physicalDamageDealtToChampions", 0),
+            p.get("trueDamageDealtToChampions", 0), p.get("totalDamageTaken", 0), p.get("damageSelfMitigated", 0),
         ))
     for t in info["teams"]:
         for b in t.get("bans") or []:

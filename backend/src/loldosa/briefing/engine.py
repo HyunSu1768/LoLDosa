@@ -9,6 +9,7 @@ from __future__ import annotations
 import itertools
 import math
 
+from ..analysis.build import AD_CUT, AP_CUT
 from ..analysis.geometry import CAMP_KO, map_side, team_camps
 from ..analysis.query import Scope, StatsDB, confidence, logit, shrink, sigmoid
 from ..ddragon import ChampionIndex
@@ -140,12 +141,14 @@ class BriefingEngine:
                 if a.champion_id and a.position and a.cell_id != state.local_cell_id}
 
     def damage_profile(self, champ_ids: list[int]) -> tuple[str, float, int]:
-        meta = [self.champs.get(c) for c in champ_ids if self.champs.get(c)]
+        """실제 경기 피해 데이터 기반 (표본 적은 챔피언은 Data Dragon 수치)."""
+        prof = self.stats.profiles(champ_ids)
+        meta = [prof[c] for c in champ_ids if c in prof and prof[c]["ap_share"] is not None]
         if not meta:
             return "unknown", 0.5, 0
-        ap = sum(c.ap_share for c in meta) / len(meta)
-        front = sum(c.frontline for c in meta)
-        prof = "ad_heavy" if ap < 0.42 else "ap_heavy" if ap > 0.58 else "balanced"
+        ap = sum(m["ap_share"] for m in meta) / len(meta)
+        front = sum(bool(m["frontline"]) for m in meta)
+        prof = "ad_heavy" if ap < AD_CUT else "ap_heavy" if ap > AP_CUT else "balanced"
         return prof, ap, front
 
     # ------------------------------------------------------------ picks / bans
@@ -254,7 +257,8 @@ class BriefingEngine:
             side_share[map_side(cx, cy)] = side_share.get(map_side(cx, cy), 0) + r["games"] / tot
         top = rows[:3]
         text = ", ".join(f"{CAMP_KO[r['start_camp']]} {pct(r['games'] / tot)}" for r in top)
-        eid = self.e(f"{self.name(champ)} {'블루' if team == 100 else '레드'} 진영 시작 캠프(1:00 위치 기준): "
+        eid = self.e(f"{self.name(champ)} {'블루' if team == 100 else '레드'} 진영 시작 캠프(1:00 위치에서 가장 가까운 캠프, "
+                     f"두 캠프 사이 위치는 제외): "
                      f"{text} (n={tot})", tot)
         return text, eid, side_share
 
@@ -307,17 +311,36 @@ class BriefingEngine:
             else:
                 card.headline = f"{self.name(champ)}: 동선 표본 부족 (n={tot})"
         if enemy_jg:
-            et, eeid, eside = self._start_line(s, enemy_jg, state.enemy_team_id)
+            et, eeid, _ = self._start_line(s, enemy_jg, state.enemy_team_id)
             if et:
-                card.add(f"적 {self.name(enemy_jg)} 예상 시작: {et}", eeid)
-                side, share = max(eside.items(), key=lambda kv: kv[1])
-                etot = sum(r["games"] for r in self.stats.start_camps(s, enemy_jg, state.enemy_team_id))
-                if share >= 0.6 and etot >= MIN_INFER:
-                    other = "봇" if side == "top" else "탑"
-                    card.add(f"적 정글은 {'탑' if side == 'top' else '봇'} 사이드 시작 확률이 높습니다({pct(share)}). "
-                             f"초반 3~4분에는 반대편({other}) 사이드 라인이 상대 정글 개입에서 상대적으로 안전합니다.",
-                             eeid, kind="inference")
-                    card.headline += f" · 적 {self.name(enemy_jg)} {'탑' if side == 'top' else '봇'} 시작 {pct(share)}"
+                card.add(f"적 {self.name(enemy_jg)} 예상 시작 캠프: {et}", eeid)
+            sides = self.stats.sides(s, enemy_jg, state.enemy_team_id)
+            for col, when in (("side3", "3:00"), ("side4", "4:00")):
+                d = sides[col]
+                n = sum(d.values())
+                if not n:
+                    continue
+                top = d.get("top", 0) / n
+                eid = self.e(f"적 {self.name(enemy_jg)}({'블루' if state.enemy_team_id == 100 else '레드'}) {when} 위치: "
+                             f"탑 사이드 {pct(top)} / 봇 사이드 {pct(1 - top)} (n={n})", n)
+                card.add(f"적 {self.name(enemy_jg)} {when} 위치: 탑 사이드 {pct(top)} / 봇 사이드 {pct(1 - top)}", eid)
+                if n >= MIN_INFER and max(top, 1 - top) >= 0.65:
+                    side = "탑" if top >= 0.5 else "봇"
+                    card.add(f"{when} 전후 적 정글은 {side} 사이드에 있을 확률이 높습니다({pct(max(top, 1 - top))}). "
+                             f"그 시각 {side} 사이드 라인은 상대 갱·스커틀 경합에 주의하세요.", eid, kind="inference")
+                    if col == "side3":
+                        card.headline += f" · 적 {self.name(enemy_jg)} 3:00 {side} 사이드 {pct(max(top, 1 - top))}"
+            trans = self.stats.side_transition(s)
+            for start in ("top", "bot"):
+                rows = [r for r in trans if r["start_side"] == start]
+                n = sum(r["games"] for r in rows)
+                if n >= MIN_INFER:
+                    opp3 = sum(r["games"] for r in rows if r["side3"] != start) / n
+                    same4 = sum(r["games"] for r in rows if r["side4"] == start) / n
+                    eid = self.e(f"고티어 정글러가 {LANE_SIDE_KO[start]} 사이드에서 시작하면 3:00에 반대 사이드 {pct(opp3)}, "
+                                 f"4:00에 시작 사이드 {pct(same4)} (n={n})", n)
+                    card.add(f"게임 중 적 시작 위치가 보이면: {LANE_SIDE_KO[start]} 사이드 시작 → 3:00 반대편 {pct(opp3)}, "
+                             f"4:00 다시 {LANE_SIDE_KO[start]} 사이드 {pct(same4)}", eid)
         if not card.headline:
             card.headline = "데이터 부족"
         return card
@@ -329,10 +352,10 @@ class BriefingEngine:
         if tot:
             parts = ", ".join(f"{LANE_KO[r['lane']]} {pct(r['games'] / tot)}" for r in fg)
             med = sorted(fg, key=lambda r: -r["games"])[0]
-            eid = self.e(f"{self.name(champ)} 8분 이전 라인에서 처음 킬이 난 갱: {parts}; 가장 많은 {LANE_KO[med['lane']]} "
-                         f"중앙 시점 {mmss(med['median_s'])}, 그중 우리 쪽이 킬을 낸 비율 {pct(med['kill_rate'])} "
-                         f"(n={tot}, 킬 없이 끝난 갱 시도는 타임라인에 남지 않아 제외)", tot)
-            card.add(f"첫 갱(킬로 이어진 것) 라인 분포: {parts}, 가장 흔한 {LANE_KO[med['lane']]} 갱 시점 "
+            eid = self.e(f"{self.name(champ)} 8분 이전 라인에서 처음 킬이 난 위치: {parts}; 가장 많은 {LANE_KO[med['lane']]} "
+                         f"중앙 시점 {mmss(med['median_s'])} (n={tot}, 킬 없이 끝난 갱 시도는 기록에 없음. "
+                         f"어느 라인이 좋은지가 아니라 고티어가 실제로 어디서 첫 킬을 냈는지의 분포)", tot)
+            card.add(f"첫 킬이 난 라인 분포(참고): {parts}, 가장 흔한 {LANE_KO[med['lane']]} 시점 "
                      f"{mmss(med['median_s'])}", eid)
         curve = {r["minute"]: r for r in self.stats.curve(s, champ)}
         if 3 in curve:
@@ -340,53 +363,58 @@ class BriefingEngine:
                          f"6분 {curve.get(6, curve[3])['level']:.1f} (n={curve[3]['games']})", curve[3]["games"])
             card.add(f"평균 레벨 3분 {curve[3]['level']:.1f} / 6분 {curve.get(6, curve[3])['level']:.1f}", eid)
 
-        base = self.stats.gank_lane_base(s)
+        base = self.stats.gank_exposure_base(s)
         allies = self.ally_roles(state)
         scores = []
-        for lane, pos in LANE_POS.items():
-            ally, enemy = allies.get(pos, 0), roles.get(pos, 0)
-            b = base.get(lane)
-            if not b:
-                continue
-            score = b["kill_rate"]
-            refs = []
-            line = f"{LANE_KO[lane]}: 킬이 난 첫 갱 중 아군 킬 {pct(b['kill_rate'])}"
-            refs.append(self.e(f"{LANE_KO[lane]} 킬이 난 첫 갱 중 갱 쪽이 킬을 낸 비율 전체 평균 {pct(b['kill_rate'])}, "
-                               f"중앙 시점 {mmss(b['median_s'])} (n={b['ganks']})", b["ganks"]))
-            if enemy:
-                t = self.stats.gank_target(s, lane, "enemy", enemy)
-                if t and t["ganks"] >= 3:
-                    adj = shrink(t["kill_rate"] * t["ganks"], t["ganks"], b["kill_rate"], k=10)
-                    score = adj
-                    refs.append(self.e(f"적 {self.name(enemy)}({LANE_KO[lane]}) 상대로 킬이 난 첫 갱 중 갱 쪽 킬 {pct(t['kill_rate'])} "
-                                       f"(n={t['ganks']})", t["ganks"]))
-                    line += f", 적 {self.name(enemy)} 대상 {pct(t['kill_rate'])}"
-            if ally and enemy:
-                lm = self.stats.lane_matchup(s, pos, ally, enemy)
-                if lm and lm["games"] >= 3:
-                    refs.append(self.e(f"{POS_KO[pos]} {self.name(ally)} vs {self.name(enemy)}: 10분 골드 "
-                                       f"{signed(lm['gd10'])}, 승률 {pct(lm['wins'] / lm['games'])} (n={lm['games']})",
-                                       lm["games"]))
-                    line += f", 라인전 10분 골드 {signed(lm['gd10'])}"
-                    # 라인이 이기는 쪽에 갱 가면 굴리기 쉽고, 지는 라인은 커버가 필요
-                    score += max(min(lm["gd10"] / 2000, 0.1), -0.1) * 0.5
-            card.add(line, *refs)
-            scores.append((score, lane, refs, bool(ally and enemy and len(refs) >= 3)))
-        if scores:
-            scores.sort(reverse=True)
-            best = scores[0]
-            n_best = min((ev.games or 0) for ev in self.ev.items if ev.id in best[2]) if best[2] else 0
-            if n_best >= MIN_INFER and len(scores) >= 2 and best[0] - scores[1][0] >= 0.03:
+        for lane, positions in (("top", ["TOP"]), ("mid", ["MIDDLE"]), ("bot", ["BOTTOM", "UTILITY"])):
+            parts, refs, comp, n_min = [], [], [], 10**9
+            for pos in positions:
+                b = base.get(pos)
+                enemy, ally = roles.get(pos, 0), allies.get(pos, 0)
+                if not b:
+                    continue
+                if enemy:
+                    x = self.stats.gank_exposure(s, pos, enemy)
+                    if x and x["games"] >= 5:
+                        v = shrink(x["died_to_jg"] * x["games"], x["games"], b["died_to_jg"], k=20)
+                        comp.append(v - b["died_to_jg"])
+                        n_min = min(n_min, x["games"])
+                        refs.append(self.e(f"적 {self.name(enemy)}({POS_KO[pos]})가 8분 전 상대 정글 관여 킬에 죽은 판 "
+                                           f"{pct(x['died_to_jg'])} (같은 포지션 평균 {pct(b['died_to_jg'])}, n={x['games']})",
+                                           x["games"]))
+                        parts.append(f"적 {self.name(enemy)} 갱 노출 {pct(x['died_to_jg'])}(평균 {pct(b['died_to_jg'])})")
+                if ally:
+                    x = self.stats.gank_exposure(s, pos, ally)
+                    if x and x["games"] >= 5:
+                        v = shrink(x["kill_with_jg"] * x["games"], x["games"], b["kill_with_jg"], k=20)
+                        comp.append(v - b["kill_with_jg"])
+                        n_min = min(n_min, x["games"])
+                        refs.append(self.e(f"아군 {self.name(ally)}({POS_KO[pos]})가 8분 전 아군 정글과 함께 킬을 낸 판 "
+                                           f"{pct(x['kill_with_jg'])} (같은 포지션 평균 {pct(b['kill_with_jg'])}, n={x['games']})",
+                                           x["games"]))
+                        parts.append(f"아군 {self.name(ally)} 정글 연계 킬 {pct(x['kill_with_jg'])}(평균 {pct(b['kill_with_jg'])})")
+                if ally and enemy:
+                    lm = self.stats.lane_matchup(s, pos, ally, enemy)
+                    if lm and lm["games"] >= 3:
+                        refs.append(self.e(f"{POS_KO[pos]} {self.name(ally)} vs {self.name(enemy)}: 10분 골드 "
+                                           f"{signed(lm['gd10'])}, 승률 {pct(lm['wins'] / lm['games'])} (n={lm['games']})",
+                                           lm["games"]))
+                        parts.append(f"{POS_KO[pos]} 라인전 10분 골드 {signed(lm['gd10'])}")
+            if parts:
+                card.add(f"{LANE_KO[lane]}: " + ", ".join(parts), *refs)
+            if comp:
+                scores.append((sum(comp) / len(comp), lane, refs, n_min))
+        if len(scores) >= 2:
+            scores.sort(key=lambda t: -t[0])
+            best, second = scores[0], scores[1]
+            if best[3] >= MIN_INFER and best[0] - second[0] >= 0.05:
                 card.headline = f"우선 갱 대상: {LANE_KO[best[1]]}"
-                basis = "킬 교환 비율과 라인전 우위를 함께 보면" if best[3] else "킬 교환 비율만 보면"
-                card.add(f"갱이 킬로 이어졌을 때 우리 쪽이 이기는 비율 기준으로, {basis} "
-                         f"{LANE_KO[best[1]]} 갱 기대값이 가장 높습니다.", *best[2], kind="inference")
+                card.add(f"{LANE_KO[best[1]]}은(는) 상대 라이너가 정글 갱에 잘 죽거나 아군 라이너가 정글과 킬을 잘 내는 조합이라, "
+                         f"평균보다 {best[0] * 100:.0f}%p 높습니다.", *best[2], kind="inference")
             else:
-                card.headline = "라인별 갱 기대값 차이가 크지 않음 → 상대 정글 반대편·라인 우선권 기준으로 판단"
-        elif tot:
-            card.headline = f"첫 갱 주로 {LANE_KO[fg[0]['lane']]}"
-        else:
-            card.headline = "데이터 부족"
+                card.headline = "라인별 갱 기대값 차이가 크지 않음 → 라인 우선권·상대 정글 위치 기준으로 판단"
+        if not card.headline:
+            card.headline = (f"첫 갱 주로 {LANE_KO[fg[0]['lane']]}" if tot else "상대 라이너 확정 후 갱 대상 판단")
         return card
 
     def card_matchup(self, s, champ, enemy_jg) -> Card | None:
@@ -407,10 +435,10 @@ class BriefingEngine:
         card.add(f"승률 {pct(m['win_rate'])} (보정 {pct(adj)}), 골드 차 5분 {signed(m['gd5'])}, "
                  f"10분 {signed(m['gd10'])}, 15분 {signed(m['gd15'])}", eid)
         e2 = self.e(f"이 매치업에서 내 10분 전 킬관여 {m['takedowns10']:.1f} / 데스 {m['deaths10']:.1f}, "
-                    f"5분 전 정글·강가 교전 {m['jungle_fights5']:.2f}회, 상대 정글 몬스터 처치 {m['enemy_jungle_cs']:.1f} "
+                    f"5분 전 정글·강가 교전 {m['jungle_fights5']:.2f}회, 게임 전체 상대 정글 몬스터 처치 {m['enemy_jungle_cs']:.1f} "
                     f"(n={m['games']})", m["games"])
         card.add(f"10분 전 킬관여 {m['takedowns10']:.1f} / 데스 {m['deaths10']:.1f}, "
-                 f"5분 전 정글 교전 {m['jungle_fights5']:.2f}회, 카정 몬스터 {m['enemy_jungle_cs']:.1f}", e2)
+                 f"5분 전 정글 교전 {m['jungle_fights5']:.2f}회, 게임 전체 카정 몬스터 {m['enemy_jungle_cs']:.1f}", e2)
         curve = [r for r in self.stats.matchup_curve(s, champ, enemy_jg) if r["minute"] >= 3]
         if len(curve) >= 5 and m["games"] >= 5:
             ahead = [r["minute"] for r in curve if r["gold_diff"] > 100]
@@ -428,10 +456,10 @@ class BriefingEngine:
         if m["games"] < MIN_INFER:
             card.add(f"표본이 {m['games']}경기라 매치업 판단은 보류합니다.", eid, kind="inference")
         elif m["gd5"] is not None and m["gd5"] < -150:
-            card.add(f"초반(5분) 골드 열세 매치업입니다. 초반 1:1 교전과 카정 대응은 피하고 라인 우선권이 있는 쪽에서 "
-                     f"움직이는 편이 안전합니다.", eid, kind="inference")
+            card.add(f"이 매치업은 5분 시점 정글 골드가 평균 {abs(m['gd5']):.0f} 뒤집니다. 초반 정글 1:1 교전은 불리한 경향이니 "
+                     f"라인 우선권이 있는 쪽에서 움직이세요.", eid, kind="inference")
         elif m["gd5"] is not None and m["gd5"] > 150:
-            card.add("초반(5분) 골드 우위 매치업입니다. 상대 동선을 예측해 카정·스커틀 경합으로 격차를 벌릴 수 있습니다.",
+            card.add(f"이 매치업은 5분 시점 정글 골드가 평균 {m['gd5']:.0f} 앞섭니다. 초반 교전·스커틀 경합에서 유리한 쪽입니다.",
                      eid, kind="inference")
         verdict = ("표본 부족" if m["games"] < MIN_INFER else
                    "유리" if adj > 0.52 else "불리" if adj < 0.48 else "팽팽")
@@ -500,11 +528,13 @@ class BriefingEngine:
         if len(allies) >= 3:
             prof, ap, front = self.damage_profile(allies)
             card.add(f"아군 피해 성향: {PROFILE_KO.get(prof, prof)} (AP 비중 {pct(ap)}), 앞라인 {front}명",
-                     self.ev.add(f"아군 조합 피해 성향 AP {pct(ap)}, 탱커/앞라인 {front}명", "Data Dragon 챔피언 정보"))
+                     self.ev.add(f"아군 조합: 챔피언별 실제 경기 마법 피해 비중 평균 {pct(ap)}, 받는 피해 비중 상위(앞라인) {front}명",
+                                 SRC_PROFILE))
         if len(enemies) >= 3:
             prof, ap, front = self.damage_profile(enemies)
             card.add(f"적 피해 성향: {PROFILE_KO.get(prof, prof)} (AP 비중 {pct(ap)}), 앞라인 {front}명",
-                     self.ev.add(f"적 조합 피해 성향 AP {pct(ap)}, 탱커/앞라인 {front}명", "Data Dragon 챔피언 정보"))
+                     self.ev.add(f"적 조합: 챔피언별 실제 경기 마법 피해 비중 평균 {pct(ap)}, 받는 피해 비중 상위(앞라인) {front}명",
+                                 SRC_PROFILE))
 
         def scaling(ids: list[int]) -> tuple[float, int] | None:
             vals, n = [], 0
@@ -531,7 +561,7 @@ class BriefingEngine:
                     card.add("적이 후반으로 갈수록 유리합니다. 초반 갱·오브젝트로 격차를 만들고 25분 전후에 끝내는 운영이 필요합니다.",
                              eid, kind="inference")
                 else:
-                    card.headline = "양 팀 성장 곡선 비슷 → 오브젝트 한타 위주"
+                    card.headline = "양 팀 후반 성향 차이 작음 (4%p 미만)"
         d = self.stats.duration(s, champ)
         if d:
             parts = [f"{k} {pct(v['wins'] / v['games'])}(n={v['games']})" for k, v in sorted(d.items(), key=lambda kv: DUR_ORDER.index(kv[0]))]
@@ -596,8 +626,10 @@ class BriefingEngine:
 
 
 SRC_PRO = "Leaguepedia 프로 대회 기록"
+SRC_PROFILE = "Riot Match-V5 챔피언별 피해량 (표본 10판 미만은 Data Dragon 수치)"
 
 
+LANE_SIDE_KO = {"top": "탑", "bot": "봇"}
 CLEAR_KO = {"full_clear": "6캠프(풀클리어)", "partial": "4~5캠프", "three_or_less": "3캠프 이하"}
 
 PROFILE_KO = {"ad_heavy": "AD 위주", "ap_heavy": "AP 위주", "balanced": "AD/AP 균형", "unknown": "알 수 없음"}

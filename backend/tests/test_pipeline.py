@@ -143,3 +143,27 @@ def test_clear_classification(built):
     kinds = {r[0] for r in con.execute("SELECT DISTINCT clear3 FROM routes").fetchall()}
     con.close()
     assert kinds and kinds <= {"full_clear", "partial", "three_or_less"}
+
+
+def test_new_tables_and_profiles(built):
+    d, _, _ = built
+    import duckdb
+
+    con = duckdb.connect(str(d / "stats.duckdb"), read_only=True)
+    ge = con.execute("SELECT died_to_jg, kill_with_jg FROM gank_exposure").fetchall()
+    assert ge and all(0 <= a <= 1 and 0 <= b <= 1 for a, b in ge)
+    assert con.execute("SELECT count(*) FROM side_transition").fetchall()[0][0] > 0
+    src = dict(con.execute("SELECT source, count(*) FROM champ_profile GROUP BY 1").fetchall())
+    assert "ddragon" in src  # 3경기 픽스처는 표본 10판 미만 → Data Dragon 대체
+    con.close()
+
+
+def test_reprocess_from_raw(tmp_path):
+    store = MatchStore(tmp_path)
+    m, t = next(fixtures())
+    store.save_raw(m["metadata"]["matchId"], m, t)
+    store.ingest(m, t, "apex")
+    store._x("UPDATE participants SET magic_dmg = NULL")
+    assert store.reprocess() == 1
+    assert store._x("SELECT count(*) FROM participants WHERE magic_dmg IS NULL")[0][0] == 0
+    store.close()
