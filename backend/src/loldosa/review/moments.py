@@ -77,7 +77,8 @@ def snapshot(md, champs: ChampionIndex, pid: int, epid: int, team: int, m: int, 
         "오브젝트: " + (", ".join(f"{o['name']} {o['text']}" for o in objs) if objs else "당분간 없음")
         + (f" · 용 개수 차이 {signed(st['dragon_diff'])}" if st["dragon_diff"] else ""),
     ]
-    return {"units": units, "objectives": objs, "facts": facts}
+    lanes = {"top": st["lane_top"], "mid": st["lane_mid"], "bot": st["lane_bot"]}
+    return {"units": units, "objectives": objs, "facts": facts, "team": team, "minute": m, "lanes": lanes}
 
 
 def build_moments(con, stats, champs: ChampionIndex, match_id: str, puuid: str) -> list[dict]:
@@ -101,6 +102,7 @@ def build_moments(con, stats, champs: ChampionIndex, match_id: str, puuid: str) 
         mine = classify_action(md, me, team, m, visits)
         res = outcome(md, me, team, allies, enemies, m)
         pool, label = stats.decision_pool(m)
+        pool = [r for r in pool if r.get("match_id") != match_id]  # 같은 경기는 비교 대상에서 뺀다
         neigh = similar(pool, st, k=60)
         crowd = summarize(neigh)
         top = [c["action"] for c in crowd[:3]]

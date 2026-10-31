@@ -53,12 +53,41 @@ def medoid(trajs: list[dict]) -> dict:
     return best
 
 
+def exact_events(con, prefix: str, match_id: str, pid: int) -> list[dict]:
+    """대표 경기의 첫 6분 '정확한 시각' 이벤트: 귀환(구매), 킬·데스·어시스트, 오브젝트."""
+    from .turns import shop_visits
+
+    pur = con.execute(f"SELECT participant_id, ts_ms FROM {prefix}events WHERE match_id=? AND type='ITEM_PURCHASED'",
+                      [match_id]).fetchall()
+    kills = con.execute(f"""SELECT ts_ms, participant_id, victim_id, assists, x, y FROM {prefix}events
+                            WHERE match_id=? AND type='CHAMPION_KILL' AND ts_ms <= 360000""", [match_id]).fetchall()
+    team = con.execute(f"SELECT team_id FROM {prefix}participants WHERE match_id=? AND participant_id=?",
+                       [match_id, pid]).fetchall()[0][0]
+    out = []
+    for v in shop_visits(pur, [(k[2], k[0]) for k in kills]):
+        if v.participant_id == pid and v.ts_ms <= 360000:
+            out.append({"t": v.ts_ms / 1000, "kind": "death_back" if v.death_back else "recall"})
+    for ts, killer, victim, assists, x, y in kills:
+        if victim == pid:
+            out.append({"t": ts / 1000, "kind": "death", "where": relative_region(team, x, y)})
+        elif killer == pid or pid in (assists or []):
+            out.append({"t": ts / 1000, "kind": "kill" if killer == pid else "assist", "where": relative_region(team, x, y)})
+    for ts, mt, tm in con.execute(f"""SELECT ts_ms, monster_type, team_id FROM {prefix}events
+                                      WHERE match_id=? AND type='ELITE_MONSTER_KILL' AND ts_ms <= 360000""", [match_id]).fetchall():
+        out.append({"t": ts / 1000, "kind": "objective", "monster": mt, "ours": tm == team})
+    return sorted(out, key=lambda e: e["t"])
+
+
 def build_medoids(con, prefix: str = "src.") -> list[tuple]:
-    """stats 테이블 행: (champion_id, team_id, style, games, match_id, points_json)"""
+    """stats 테이블 행: (champion_id, team_id, style, games, match_id, points_json)
+    points 에 분 단위 순간 위치·먹은 캠프 수와 함께, 대표 경기의 정확한 이벤트(귀환·킬·오브젝트)를 담는다."""
     rows = []
     for (champ, team, style), trajs in trajectories(con, prefix).items():
         if len(trajs) < 3:
             continue
         m = medoid(trajs)
-        rows.append((champ, team, style, len(trajs), m["match_id"], json.dumps(m["points"])))
+        pid = con.execute(f"""SELECT participant_id FROM {prefix}participants
+                              WHERE match_id=? AND champion_id=? AND position='JUNGLE'""", [m["match_id"], champ]).fetchall()[0][0]
+        payload = {"minutes": m["points"], "events": exact_events(con, prefix, m["match_id"], pid)}
+        rows.append((champ, team, style, len(trajs), m["match_id"], json.dumps(payload)))
     return rows

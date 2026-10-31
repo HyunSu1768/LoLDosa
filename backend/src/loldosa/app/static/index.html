@@ -73,15 +73,9 @@
       </div>
 
       <div id="paths-box" class="panel hidden">
-        <div class="panel-head"><h3>1분 이미지 트레이닝 · 첫 6분 동선</h3><span class="muted">고티어 실제 한 판의 동선이에요 (평균이 아니라 가장 대표적인 판)</span></div>
-        <div class="paths">
-          <div id="paths-map"></div>
-          <div class="paths-side">
-            <div id="paths-styles" class="row"></div>
-            <ol id="paths-steps" class="path-steps"></ol>
-            <button class="primary" id="paths-play">▶ 재생</button>
-          </div>
-        </div>
+        <div class="panel-head"><h3>첫 6분 시간표</h3><span class="muted">고티어 실제 한 판의 기록이에요. 시각이 정확한 건 귀환·킬·오브젝트이고, 분마다 적힌 위치는 그 순간의 위치일 뿐 이동 경로가 아니에요.</span></div>
+        <div id="paths-styles" class="row"></div>
+        <div id="paths-table"></div>
       </div>
 
       <div id="ai" class="ai hidden">
@@ -90,7 +84,7 @@
         <p id="ai-status" class="muted"></p>
       </div>
 
-      <details class="more"><summary>자세한 데이터 보기 <span class="muted">(동선·갱·상성·오브젝트·조합)</span></summary>
+      <details class="more"><summary>자세한 데이터 보기 <span class="muted">(초반 정글링·갱·상성·오브젝트·조합)</span></summary>
         <div id="cards" class="cards"></div>
       </details>
     </div>

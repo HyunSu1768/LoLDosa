@@ -292,47 +292,43 @@ function onBriefing(msg) {
   if (!pathState || JSON.stringify(pathState.paths) !== JSON.stringify(b.paths)) renderPaths(b.paths);
 }
 
-/* ---------- 이미지 트레이닝 ---------- */
-const REGION_SAY = { own_jungle: "우리 정글", enemy_jungle: "상대 정글", river: "강가", top: "탑", mid: "미드", bot: "봇", base: "본진" };
+/* ---------- 첫 6분 시간표 (정확한 기록만) ---------- */
+const REGION_SAY = { own_jungle: "우리 정글", enemy_jungle: "상대 정글", river: "강가", top: "탑 라인", mid: "미드 라인", bot: "봇 라인", base: "본진" };
+const MONSTER_SAY = { DRAGON: "드래곤", HORDE: "공허 유충", RIFTHERALD: "협곡의 전령", BARON_NASHOR: "바론" };
 let pathState = null;
+const mmssJs = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+function eventSay(e) {
+  if (e.kind === "recall") return "귀환 (상점 구매 시각)";
+  if (e.kind === "death_back") return "죽고 부활해서 템 구매";
+  if (e.kind === "death") return `죽음 · ${REGION_SAY[e.where] || ""}`;
+  if (e.kind === "kill") return `킬 · ${REGION_SAY[e.where] || ""}`;
+  if (e.kind === "assist") return `킬 도움 · ${REGION_SAY[e.where] || ""}`;
+  if (e.kind === "objective") return `${e.ours ? "우리" : "상대"} 팀 ${MONSTER_SAY[e.monster] || e.monster} 처치`;
+  return e.kind;
+}
+function timelineRows(rec) {
+  const rows = rec.minutes.map((p) => ({ t: p.m * 60, html: `<span class="tl-min">${p.m}:00</span> 먹은 캠프 <b>${p.camps}개</b> <span class="muted">· 그 순간 위치: ${REGION_SAY[p.region] || p.region}</span>` }));
+  for (const e of rec.events) rows.push({ t: e.t, html: `<span class="tl-ev ${e.kind}">${mmssJs(e.t)}</span> <b>${esc(eventSay(e))}</b>` });
+  return rows.sort((a, b) => a.t - b.t).map((r) => `<li>${r.html}</li>`).join("");
+}
 function renderPaths(paths) {
   const box = $("paths-box");
   if (!paths || !paths.mine || !paths.mine.length) { box.classList.add("hidden"); return; }
   box.classList.remove("hidden");
-  pathState = { paths, style: 0, step: 6, timer: null };
-  $("paths-styles").innerHTML = paths.mine.map((p, i) => `<button class="ghost small ${i === 0 ? "on" : ""}" data-i="${i}">${esc(p.label)} · ${p.games}판</button>`).join("");
+  pathState = { paths, style: 0 };
+  $("paths-styles").innerHTML = paths.mine.map((p, i) => `<button class="ghost small ${i === 0 ? "on" : ""}" data-i="${i}">${esc(p.label)} · 고티어 ${p.games}판</button>`).join("");
   document.querySelectorAll("#paths-styles button").forEach((b) => (b.onclick = () => {
-    pathState.style = +b.dataset.i; pathState.step = 6;
+    pathState.style = +b.dataset.i;
     document.querySelectorAll("#paths-styles button").forEach((x) => x.classList.toggle("on", x === b));
     drawPaths();
   }));
-  $("paths-play").onclick = playPaths;
   drawPaths();
 }
 function drawPaths() {
-  const S = 280, M = 14870, px = (x) => (x / M) * S, py = (y) => S - (y / M) * S;
   const mine = pathState.paths.mine[pathState.style], enemy = pathState.paths.enemy;
-  const upto = (pts) => pts.filter((p) => p.m <= pathState.step);
-  const line = (pts, color) => pts.length > 1 ? `<polyline points="${pts.map((p) => `${px(p.x)},${py(p.y)}`).join(" ")}" fill="none" stroke="${color}" stroke-width="2.5" stroke-dasharray="4 3" stroke-opacity=".85"/>` : "";
-  const dots = (pts, color) => pts.map((p, i) => `<circle cx="${px(p.x)}" cy="${py(p.y)}" r="${i === pts.length - 1 ? 9 : 6}" fill="${color}" fill-opacity="${i === pts.length - 1 ? 1 : .6}"/>
-      <text x="${px(p.x)}" y="${py(p.y) + 3}" font-size="8" text-anchor="middle" fill="#000">${p.m}</text>`).join("");
-  const mp = upto(mine.points), ep = enemy ? upto(enemy.points) : [];
-  $("paths-map").innerHTML = `<div class="snapmap" style="width:${S}px;height:${S}px"><img class="bg" src="https://ddragon.leagueoflegends.com/cdn/${ddragon}/img/map/map11.png" alt="" onerror="this.remove()">
-    <svg viewBox="0 0 ${S} ${S}" style="position:absolute;inset:0">${line(ep, "#ff5f66")}${dots(ep, "#ff5f66")}${line(mp, "#f0d79a")}${dots(mp, "#f0d79a")}</svg></div>
-    <div class="legend"><span><i style="background:#f0d79a"></i>나 (${esc(mine.label)})</span>${enemy ? `<span><i style="background:#ff5f66"></i>상대 ${esc(enemy.name)}</span>` : ""}</div>`;
-  $("paths-steps").innerHTML = mine.points.map((p) => {
-    const e = enemy && enemy.points.find((q) => q.m === p.m);
-    return `<li class="${p.m === pathState.step ? "now" : p.m > pathState.step ? "later" : ""}"><b>${p.m}:00</b> ${REGION_SAY[p.region] || p.region} · ${p.camps}캠프 먹음
-      ${e ? `<span class="muted"> / 상대 정글: ${REGION_SAY[e.region] || e.region}</span>` : ""}</li>`;
-  }).join("");
-}
-function playPaths() {
-  clearInterval(pathState.timer);
-  pathState.step = 1; drawPaths();
-  pathState.timer = setInterval(() => {
-    pathState.step += 1; drawPaths();
-    if (pathState.step >= 6) clearInterval(pathState.timer);
-  }, 1100);
+  $("paths-table").innerHTML = `<div class="tl-grid">
+    <div><h4>나 · ${esc(mine.label)}</h4><ol class="timeline">${timelineRows(mine)}</ol></div>
+    ${enemy ? `<div><h4>상대 · ${esc(enemy.name)}</h4><ol class="timeline">${timelineRows(enemy)}</ol></div>` : ""}</div>`;
 }
 
 function renderAI(msg) {
@@ -416,20 +412,6 @@ $("review-sync").onclick = async () => {
   } catch (e) { $("review-status").textContent = e.message; } finally { btn.disabled = false; }
 };
 
-function minimap(rv) {
-  const S = 340, M = 14870;
-  const px = (x) => (x / M) * S, py = (y) => S - (y / M) * S;
-  const path = (pts, color) => pts.length ? `<polyline points="${pts.map((p) => `${px(p[1])},${py(p[2])}`).join(" ")}" fill="none" stroke="${color}" stroke-width="2" stroke-opacity=".75"/>`
-    + pts.map((p) => `<circle cx="${px(p[1])}" cy="${py(p[2])}" r="${p[0] <= 4 ? 7 : 5}" fill="${color}" fill-opacity=".85"/><text x="${px(p[1])}" y="${py(p[2]) + 3}" font-size="8" text-anchor="middle" fill="#000">${p[0]}</text>`).join("") : "";
-  const marks = rv.moments.filter((m) => m.x != null && m.t <= 660 && ["death", "enemy_gank", "objective"].includes(m.kind)).map((m) => {
-    const c = m.kind === "objective" ? (m.good ? "#3ccf91" : "#ffb547") : "#ff5f66";
-    return `<text x="${px(m.x)}" y="${py(m.y) + 5}" font-size="14" text-anchor="middle" fill="${c}"><title>${esc(m.text)}</title>${m.kind === "objective" ? "◆" : "✕"}</text>`;
-  }).join("");
-  return `<div class="minimap"><img src="https://ddragon.leagueoflegends.com/cdn/${ddragon}/img/map/map11.png" alt="" onerror="this.remove()">
-    <svg viewBox="0 0 ${S} ${S}">${path(rv.paths.enemy_jungler, "#ff5f66")}${path(rv.paths.me, "#f0d79a")}${marks}</svg></div>
-    <div class="legend"><span><i style="background:#f0d79a"></i>나 (숫자=분)</span><span><i style="background:#ff5f66"></i>상대 정글</span><span style="color:#ff5f66">✕ 데스·상대 갱</span><span style="color:#ffb547">◆ 상대 오브젝트</span><span style="color:#3ccf91">◆ 우리 오브젝트</span></div>`;
-}
-
 async function openReview(id) {
   currentMatch = id;
   document.querySelectorAll(".match").forEach((li) => li.classList.toggle("active", li.dataset.id === id));
@@ -472,8 +454,8 @@ async function openReview(id) {
       ${others ? `<h3 class="sec">그 밖에 고칠 점</h3>${others}` : ""}
       ${strengths ? `<h3 class="sec">잘한 점</h3><div class="strengths">${strengths}</div>` : ""}
       <div id="rv-ai"><button class="ghost" id="rv-ai-btn">🤖 AI 복기 코칭 받기</button></div>
-      <details class="more"><summary>경기 흐름 보기 <span class="muted">(10분 동선 · 주요 순간 · 고티어 비교표)</span></summary>
-        <div class="rv-grid"><div>${minimap(rv)}</div><div><ul class="moments">${moments}</ul></div></div>
+      <details class="more"><summary>경기 기록 보기 <span class="muted">(사건 시간표 · 비교표)</span></summary>
+        <h4>정확한 시각이 있는 사건들</h4><ul class="moments">${moments}</ul>
         ${metrics ? `<table class="metrics"><tr><th>항목</th><th>이번 판</th><th>내 최근 평균${cmp.me_games ? ` (${cmp.me_games}판)` : ""}</th><th>다음 티어 ${esc(cmp.target_label || "")}</th><th>고티어 (${esc(rv.scope_label)})</th><th></th></tr>${metrics}</table>` : ""}
       </details>`;
     loadMoments(id);
@@ -490,17 +472,54 @@ async function openReview(id) {
   } catch (e) { box.innerHTML = `<p class="muted">${esc(e.message)}</p>`; }
 }
 /* ---------- 그 순간으로 돌아가기 (판단 훈련) ---------- */
-function snapshotMap(snap, size = 300) {
-  const M = 14870, px = (x) => (x / M) * size, py = (y) => size - (y / M) * size;
-  const units = snap.units.map((u) => {
-    const r = u.me ? 15 : 11;
-    const color = u.me ? "#f0d79a" : u.ally ? "#4aa3ff" : "#ff5f66";
-    return `<div class="unit ${u.me ? "me" : ""}" style="left:${px(u.x) - r}px;top:${py(u.y) - r}px;width:${r * 2}px;height:${r * 2}px;border-color:${color}"
-      title="${esc(u.name)} · Lv${u.level}${u.hp != null ? ` · 체력 ${u.hp}%` : ""}${u.enemy_jungler ? " · 상대 정글" : ""}">${imgTag(u.key)}
-      ${u.hp != null ? `<i class="hpbar" style="width:${u.hp}%"></i>` : ""}</div>`;
-  }).join("");
-  const objs = snap.objectives.map((o) => `<div class="objmark" style="left:${px(o.x) - 30}px;top:${py(o.y) - 10}px">${esc(o.name)}<br><b>${esc(o.text)}</b></div>`).join("");
-  return `<div class="snapmap" style="width:${size}px;height:${size}px"><img class="bg" src="https://ddragon.leagueoflegends.com/cdn/${ddragon}/img/map/map11.png" alt="" onerror="this.remove()">${objs}${units}</div>`;
+/** 상황판: 실제 지도 대신 라인 그림 + 글자 라벨. 항상 우리 본진이 왼쪽 아래. */
+function snapshotMap(snap, size = 320) {
+  const M = 14870, flip = snap.team === 200;
+  const X = (x) => ((flip ? M - x : x) / M) * size, Y = (y) => size - ((flip ? M - y : y) / M) * size;
+  const S = size, pad = 18;
+  const laneSay = (v) => v > 150 ? `우리 +${Math.round(v)}` : v < -150 ? `우리 ${Math.round(v)}` : "비슷";
+  const laneCls = (v) => v > 150 ? "win" : v < -150 ? "lose" : "even";
+  const L = snap.lanes || {};
+  // 라벨 겹침 피하기: 중요한 유닛부터 자리를 잡고, 겹치면 위·아래로 비켜 놓는다.
+  const order = [...snap.units].sort((a, b) => (b.me ? 3 : b.enemy_jungler ? 2 : 0) - (a.me ? 3 : a.enemy_jungler ? 2 : 0));
+  const chosen = [];
+  const boxes = [{ x: pad + 4, y: pad + 3, w: 70, h: 13 }, { x: S / 2 + 8, y: S / 2 - 19, w: 70, h: 13 },
+    { x: S - pad - 76, y: S - pad - 17, w: 74, h: 13 }, { x: pad + 2, y: S - pad - 17, w: 50, h: 13 }, { x: S - pad - 50, y: pad + 3, w: 48, h: 13 },
+    ...snap.objectives.map((o) => { const w = (o.name.length + o.text.length + 1) * 7; return { x: X(o.x) - w / 2, y: Y(o.y) - 11, w, h: 13 }; })];
+  for (const u of snap.units) boxes.push({ x: X(u.x) - 6, y: Y(u.y) - 6, w: 12, h: 12 });  // 점 위에 글자가 덮이지 않게
+  for (const u of order) {
+    const cls = u.me ? "me" : u.enemy_jungler ? "ejg" : u.ally ? "ally" : "enemy";
+    const text = (u.me ? `나 · ${u.name}` : u.enemy_jungler ? `상대 정글 · ${u.name}` : u.name)
+      + (u.hp != null && (u.me || u.enemy_jungler) ? ` (체력 ${u.hp}%)` : "");
+    const w = text.length * (u.me || u.enemy_jungler ? 9.5 : 8.5), h = 12;
+    const cx = X(u.x), cy = Y(u.y);
+    let spot = null;
+    for (const [dx, dy] of [[8, 4], [8, -9], [8, 17], [-8 - w, 4], [-8 - w, -9], [-8 - w, 17], [8, -22], [8, 30]]) {
+      let bx = cx + dx; if (bx + w > S - 2) bx = cx - 8 - w; if (bx < 2) bx = 2;
+      const by = cy + dy - 10;
+      if (!boxes.some((b) => bx < b.x + b.w && bx + w > b.x && by < b.y + b.h && by + h > b.y)) { spot = { x: bx, y: by }; break; }
+    }
+    if (!spot) spot = { x: Math.min(cx + 8, S - w - 2), y: cy - 6 };
+    boxes.push({ x: spot.x, y: spot.y, w, h });
+    chosen.push(`<g class="tok ${cls}"><circle cx="${cx}" cy="${cy}" r="${u.me || u.enemy_jungler ? 6 : 4}"/>
+      <text x="${spot.x}" y="${spot.y + 10}">${esc(text)}</text></g>`);
+  }
+  const tokens = chosen.reverse().join("");
+  const objs = snap.objectives.map((o) => `<text class="obj" x="${X(o.x)}" y="${Y(o.y)}" text-anchor="middle">${esc(o.name)} ${esc(o.text)}</text>`).join("");
+  return `<div class="board-wrap"><svg class="board" viewBox="0 0 ${S} ${S}" width="${S}" height="${S}">
+    <rect x="0" y="0" width="${S}" height="${S}" rx="12" class="bg"/>
+    <path d="M${pad} ${S - pad} L${pad} ${pad} L${S - pad} ${pad}" class="lane ${laneCls(L.top)}"/>
+    <path d="M${pad} ${S - pad} L${S - pad} ${pad}" class="lane ${laneCls(L.mid)}"/>
+    <path d="M${pad} ${S - pad} L${S - pad} ${S - pad} L${S - pad} ${pad}" class="lane ${laneCls(L.bot)}"/>
+    <path d="M${pad + 30} ${pad + 30} L${S - pad - 30} ${S - pad - 30}" class="river"/>
+    <text class="base" x="${pad + 4}" y="${S - pad - 6}">우리 본진</text><text class="base" x="${S - pad - 4}" y="${pad + 14}" text-anchor="end">상대 본진</text>
+    <text class="lanelbl ${laneCls(L.top)}" x="${pad + 6}" y="${pad + 14}">탑 ${laneSay(L.top)}</text>
+    <text class="lanelbl ${laneCls(L.mid)}" x="${S / 2 + 10}" y="${S / 2 - 8}">미드 ${laneSay(L.mid)}</text>
+    <text class="lanelbl ${laneCls(L.bot)}" x="${S - pad - 6}" y="${S - pad - 6}" text-anchor="end">봇 ${laneSay(L.bot)}</text>
+    <text class="rivlbl" x="${S * 0.68}" y="${S * 0.62}">강</text>
+    ${objs}${tokens}</svg>
+    <div class="legend board-legend"><span class="lg me">● 나</span><span class="lg ejg">● 상대 정글</span><span class="lg ally">● 우리 팀</span><span class="lg enemy">● 상대 팀</span>
+    <span class="muted">${snap.minute}:00 순간 위치 · 라인 색: 초록 우리 유리, 빨강 불리 (라인 골드 차)</span></div></div>`;
 }
 
 async function loadMoments(matchId) {
@@ -603,7 +622,7 @@ function nextReview(i, right) {
     }));
   } else {
     const mo = it.moment;
-    openModal(`${head}<h2>${mo.minute}:00 · ${esc(mo.reason)}</h2><div class="mo-body small">${snapshotMap(mo.snapshot, 240)}
+    openModal(`${head}<h2>${mo.minute}:00 · ${esc(mo.reason)}</h2><div class="mo-body small">${snapshotMap(mo.snapshot, 260)}
       <div><ul class="mo-facts">${mo.snapshot.facts.map((f) => `<li>${linkify(f)}</li>`).join("")}</ul>
       <div class="mo-q">여기서 뭐 할래요?</div><div class="mo-choices">${mo.choices.map((c) => `<button class="choice" data-a="${c.action}">${esc(c.label)}</button>`).join("")}</div></div></div>
       <div id="rv-after"></div>`);

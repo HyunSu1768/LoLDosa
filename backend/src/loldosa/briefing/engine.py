@@ -290,7 +290,7 @@ class BriefingEngine:
 
     def card_route(self, s, state, champ, enemy_jg) -> Card:
         team = state.my_team_id
-        card = Card("route", "시작·초반 동선", "")
+        card = Card("route", "시작·초반 정글링", "")
         text, eid, my_side = self._start_line(s, champ, team)
         if text:
             card.add(f"내 시작 캠프 분포: {text}", eid)
@@ -346,7 +346,7 @@ class BriefingEngine:
                 else:
                     card.headline = f"{self.name(champ)}: 풀캠·3캠 갱 섞어서 씀 (풀캠 {pct(share['full_clear'])})"
             else:
-                card.headline = f"{self.name(champ)}: 동선 데이터 부족 (n={tot})"
+                card.headline = f"{self.name(champ)}: 초반 정글링 데이터 부족 (n={tot})"
         if enemy_jg:
             et, eeid, _ = self._start_line(s, enemy_jg, state.enemy_team_id)
             if et:
@@ -697,12 +697,13 @@ class BriefingEngine:
             m = self.stats.path_medoid(champ, team, style)
             if m:
                 out["mine"].append({"style": style, "label": style_ko[style], "games": m["games"],
-                                    "points": m["points"], "match_id": m["match_id"]})
+                                    "minutes": m["points"]["minutes"], "events": m["points"]["events"]})
         out["mine"].sort(key=lambda x: -x["games"])
         if enemy_jg:
             m = self.stats.path_medoid(enemy_jg, state.enemy_team_id, "any")
             if m:
-                out["enemy"] = {"games": m["games"], "points": m["points"], "name": self.name(enemy_jg)}
+                out["enemy"] = {"games": m["games"], "minutes": m["points"]["minutes"], "events": m["points"]["events"],
+                                "name": self.name(enemy_jg)}
         return out
 
     # ------------------------------------------------------------ plan
