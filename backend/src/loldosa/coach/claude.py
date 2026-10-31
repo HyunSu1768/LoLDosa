@@ -57,6 +57,43 @@ def parse_and_validate(text: str, valid_ids: set[str]) -> dict:
     return {"headline": str(data.get("headline", "")).strip(), "points": points, "dropped": dropped}
 
 
+class CoachError(RuntimeError):
+    pass
+
+
+def parse_envelope(stdout: str) -> dict | None:
+    """--output-format json 의 마지막 JSON 줄 (앞에 경고 줄이 섞일 수 있음)."""
+    for line in reversed(stdout.strip().splitlines()):
+        line = line.strip()
+        if line.startswith("{"):
+            try:
+                return json.loads(line)
+            except json.JSONDecodeError:
+                continue
+    return None
+
+
+def explain_failure(envelope: dict | None, stderr: str = "") -> str:
+    """CLI 실패 이유 + 해결 방법을 한 문장으로."""
+    reason = str((envelope or {}).get("result") or "").strip() or stderr.strip()[-300:] or "알 수 없는 오류"
+    status = (envelope or {}).get("api_error_status")
+    low = reason.lower()
+    if status == 401 or "login" in low or "/login" in low or "authenticat" in low or "api key" in low:
+        hint = ("터미널에서 `claude` 를 실행해 /login 으로 구독 계정에 로그인하세요. "
+                "ANTHROPIC_API_KEY 환경변수가 설정돼 있으면 구독 대신 그 키를 쓰니 지우세요.")
+    elif "credit" in low or "balance" in low:
+        hint = "API 키 결제로 실행되고 있습니다. ANTHROPIC_API_KEY 환경변수를 지우고 구독 계정으로 로그인하세요."
+    elif status == 404 or "model" in low:
+        hint = ".env 에 LOLDOSA_CLAUDE_MODEL=sonnet (또는 opus/haiku) 처럼 사용 가능한 모델을 지정하세요."
+    elif status == 429 or "limit" in low:
+        hint = "구독 사용량 한도에 걸렸습니다. 한도가 풀리면 다시 동작합니다 (카드는 계속 사용 가능)."
+    elif "unknown option" in low or "unrecognized" in low:
+        hint = "Claude Code 가 오래된 버전입니다. `claude update` 로 업데이트하세요."
+    else:
+        hint = "`uv run loldosa ai check` 로 자세히 확인하세요."
+    return f"{reason} → {hint}"
+
+
 class ClaudeCoach:
     def __init__(self, model: str | None = None, timeout: float = 90.0) -> None:
         self.cli = os.getenv("LOLDOSA_CLAUDE_CLI") or shutil.which("claude")
@@ -88,11 +125,9 @@ class ClaudeCoach:
         except (asyncio.TimeoutError, asyncio.CancelledError):
             proc.kill()
             raise
-        if proc.returncode != 0:
-            raise RuntimeError((err or out).decode("utf-8", "replace")[:300])
-        envelope = json.loads(out.decode("utf-8"))
-        if envelope.get("is_error"):
-            raise RuntimeError(str(envelope.get("result"))[:300])
+        envelope = parse_envelope(out.decode("utf-8", "replace"))
+        if envelope is None or envelope.get("is_error") or proc.returncode != 0:
+            raise CoachError(explain_failure(envelope, err.decode("utf-8", "replace")))
         return envelope.get("result", "")
 
     async def coach(self, briefing: dict) -> dict:

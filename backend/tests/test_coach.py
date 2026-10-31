@@ -38,3 +38,14 @@ def test_coach_disabled():
     coach = ClaudeCoach()
     coach.enabled = False
     assert asyncio.run(coach.coach({}))["status"] == "disabled"
+
+
+def test_explain_failure_uses_result_field():
+    from loldosa.coach.claude import explain_failure, parse_envelope
+
+    out = 'warning line\n{"is_error": true, "api_error_status": 401, "result": "Invalid API key · Please run /login"}'
+    env = parse_envelope(out)
+    msg = explain_failure(env)
+    assert "Invalid API key" in msg and "/login" in msg
+    assert "모델" in explain_failure({"api_error_status": 404, "result": "issue with the selected model"})
+    assert "알 수 없는" in explain_failure(None)

@@ -203,6 +203,31 @@ def cmd_app(args) -> int:
     return 0
 
 
+# ---- ai --------------------------------------------------------------------
+
+def cmd_ai_check(_args) -> int:
+    import os
+    import time as _time
+
+    from .coach.claude import ClaudeCoach
+
+    coach = ClaudeCoach(timeout=120)
+    _print(f"Claude Code CLI: {coach.cli or '없음'}  모델: {coach.model}")
+    if os.getenv("ANTHROPIC_API_KEY"):
+        _print("[!!] ANTHROPIC_API_KEY 환경변수가 있습니다. 이 경우 구독이 아니라 API 키 과금으로 실행됩니다.")
+    if not coach.cli:
+        _print("[!!] `claude` 명령을 찾을 수 없습니다. Claude Code 를 설치하세요: https://code.claude.com")
+        return 1
+    t = _time.time()
+    try:
+        text = asyncio.run(coach.run_cli('{"ok": true} 라고만 JSON 으로 답해.', system="JSON 한 줄만 출력한다."))
+    except Exception as e:  # noqa: BLE001
+        _print(f"[!!] 실패: {e}")
+        return 1
+    _print(f"[ok] 응답 {_time.time() - t:.1f}초: {text.strip()[:80]}")
+    return 0
+
+
 # ---- pro / guides ----------------------------------------------------------
 
 def cmd_pro_sync(args) -> int:
@@ -493,6 +518,9 @@ def build_parser() -> argparse.ArgumentParser:
     app.add_argument("--port", type=int, default=8765)
     app.add_argument("--no-ai", action="store_true", help="Claude 코칭 끄기")
     app.set_defaults(func=cmd_app)
+
+    ai = sub.add_parser("ai", help="AI 코치(Claude Code)").add_subparsers(dest="sub", required=True)
+    ai.add_parser("check", help="Claude Code 구독 호출 확인").set_defaults(func=cmd_ai_check)
 
     pro = sub.add_parser("pro", help="프로 대회 데이터 (Leaguepedia)").add_subparsers(dest="sub", required=True)
     ps = pro.add_parser("sync", help="프로 정글 기록 수집")
