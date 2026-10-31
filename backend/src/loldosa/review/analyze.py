@@ -563,7 +563,7 @@ class Reviewer:
                 t = e["ts_ms"] / 1000
                 rv.lessons.append(Lesson(
                     f"{mmss(t)} 골드 들고 죽음",
-                    f"죽기 직전 분({int(e['ts_ms'] // 60000)}:00) 기준 안 쓴 골드가 {cur:,}였어요. "
+                    f"죽기 직전({int(e['ts_ms'] // 60000)}:00)에 안 쓴 골드를 {cur:,}골드나 들고 있었어요. "
                     f"이만큼 모였으면 싸우기 전에 먼저 귀환해서 템부터 샀어야 해요.", 2,
                     [self.mine(f"{int(e['ts_ms'] // 60000)}:00 보유 골드 {cur:,}, {mmss(t)} 데스")]))
                 break

@@ -502,7 +502,7 @@ class BriefingEngine:
         m = self.stats.matchup(s, champ, enemy_jg)
         if not m:
             card.headline = f"vs {self.name(enemy_jg)}: 기록 없음"
-            card.add(f"{self.scope.label}에 {self.name(champ)} vs {self.name(enemy_jg)} 정글 기록이 아직 없어요.")
+            card.add(f"{self.scope.label}에서 {self.name(champ)} vs {self.name(enemy_jg)} 정글 기록이 아직 없어요.")
             return card
         adj = shrink(m["wins"], m["games"], k=15)
         vs = self._duel_line(s, champ, enemy_jg)
