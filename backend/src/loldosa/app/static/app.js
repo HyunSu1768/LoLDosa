@@ -122,7 +122,7 @@ async function loadHome() {
     <div class="focus-card">
       <div class="label">지금 연습 중인 목표</div>
       <h2>${esc(f.title)}</h2>
-      <div class="goal">🎯 ${esc(f.goal || "")}</div>
+      <div class="goal">🎯 ${esc(f.goal || "")}</div>${f.note ? `<div class="note">${esc(f.note)}</div>` : ""}
       <p>${linkify(f.summary || "")}</p>
       ${f.how && f.how.length ? `<ol class="how">${f.how.map((x) => `<li>${linkify(x)}</li>`).join("")}</ol>` : ""}
       <div class="trend"><span class="muted">최근 경기 (왼쪽이 오래된 경기)</span>
@@ -435,7 +435,9 @@ async function openReview(id) {
       </div>` : (rv.is_jungle ? `<div class="key-lesson good"><h2>눈에 띄는 큰 실수가 없었어요 👍</h2><p>아래 체크에서 지킨 것과 놓친 것을 확인해 보세요.</p></div>` : "");
     const checks = rv.checks.length ? `<h3 class="sec">목표 체크 <span class="muted">경기 기록으로 체크 · 누르면 설명 보기</span></h3><div class="checks">${rv.checks.filter((c) => c.status !== "na").map((c) =>
       `<div class="check ${c.status} ${c.focus ? "focus" : ""}" onclick="openConcept('${c.concept}')"><span class="ic">${c.status === "pass" ? "✓" : "✗"}</span>
-        <div><b>${esc(c.title)}</b>${c.focus ? ' <span class="pill on">연습 목표</span>' : ""}<div class="muted">${esc(c.value)}</div></div></div>`).join("")}</div>` : "";
+        <div><b>${esc(c.title)}</b>${c.focus ? ' <span class="pill on">연습 목표</span>' : ""}<div class="muted">${esc(c.value)}</div></div></div>`).join("")}</div>
+      ${rv.checks.some((c) => c.info) ? `<details class="more"><summary>참고 기록 <span class="muted">(프로·챌린저와 플래티넘 사이에 차이가 없어서 채점하지 않는 항목)</span></summary>
+        <ul class="info-checks">${rv.checks.filter((c) => c.info).map((c) => `<li><b>${esc(c.title)}</b> · ${esc(c.info)} <span class="muted">· 통과율 프로 ${Math.round(c.validation.pro * 100)}% / 챌린저 ${Math.round(c.validation.challenger * 100)}% / 플래티넘 ${Math.round(c.validation.platinum * 100)}%</span></li>`).join("")}</ul></details>` : ""}` : "";
     const others = rv.lessons.filter((l) => !kl || l.title !== kl.lesson.title).slice(0, 4).map((l) => `<div class="lesson sev${Math.min(l.severity, 3)}"><h4>${esc(l.title)}</h4>
         <p>${linkify(l.text)}${evChips(l.evidence, pool)}</p>${whyBlock(l.concepts)}</div>`).join("");
     const strengths = rv.strengths.map((l) => `<span class="strength">✓ ${esc(l.title)}</span>`).join("");

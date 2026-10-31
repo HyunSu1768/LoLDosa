@@ -41,14 +41,16 @@ def _turn(f):
 
 
 def _recall(f):
-    turns = f.get("obj_turns") or {}
-    if any(t["turn"] == "late" for t in turns.values()):
-        return "fail", "오브젝트 직전에 귀환"
+    """검증 결과 티어를 가른 두 가지만 본다: 1,200골드 넘게 들고 죽기, 첫 귀환 5:00 넘기기.
+    (오브젝트 직전 귀환은 프로 8%·챌린저 15%·플래티넘 14%로 차이가 없어서 뺐다)"""
+    fr = f.get("first_recall_s")
     if f.get("gold_death"):
         return "fail", f"골드 {f['gold_death']:,} 들고 죽음"
-    if f.get("first_recall_s") is None and not turns:
+    if fr is None:
         return "na", "-"
-    return "pass", f"첫 귀환 {_mmss(f.get('first_recall_s'))}, 직전 귀환 없음, 골드 들고 안 죽음"
+    if fr > 300:
+        return "fail", f"첫 귀환 {_mmss(fr)} (5:00 넘김)"
+    return "pass", f"첫 귀환 {_mmss(fr)}, 골드 들고 안 죽음"
 
 
 def _objective(f):
@@ -94,7 +96,7 @@ CHECKS = {
     "full-clear": ("3:00까지 목표 캠프 수 먹기 (풀캠 챔피언 6캠프, 아니면 4캠프)", _full_clear),
     "clear-efficiency": ("10분 정글 CS 고티어 평균의 90% 이상", _clear_eff),
     "turn-tempo": ("첫 드래곤 잡히기 0:40~2:30 전에 미리 귀환", _turn),
-    "recall-timing": ("오브젝트 직전엔 귀환하지 않기, 1,200골드 넘게 들고 죽지 않기", _recall),
+    "recall-timing": ("첫 귀환은 5:00 전에, 1,200골드 넘게 들고 죽지 않기", _recall),
     "objective-setup": ("오브젝트 싸움에 합류하기", _objective),
     "jungle-tracking": ("10분 전 상대 정글·강가에서 죽지 않기", _tracking),
     "counter-gank": ("10분 전 상대 정글 갱에 아군 안 죽게 하기", _counter),
@@ -103,9 +105,32 @@ CHECKS = {
 }
 
 
+# 실제 경기 검증 (research_notes/검증/검증 결과.md): 프로 12명 120판·챌린저 8명 96판·플래티넘 10명 63판.
+# 통과율이 고수 그룹에서 확실히 높은 체크만 채점한다. 나머지는 값만 '참고'로 보여주고 달성률·숙련도엔 안 넣는다.
+VALIDATION = {  # concept: (프로, 챌린저, 플래티넘 통과율, 채점 여부)
+    "full-clear": (0.64, 0.76, 0.43, True),
+    "clear-efficiency": (0.83, 0.94, 0.48, True),
+    "vision-control": (0.78, 0.67, 0.53, True),
+    "recall-timing": (0.57, 0.60, 0.38, True),
+    "objective-setup": (0.67, 0.54, 0.51, False),
+    "turn-tempo": (0.44, 0.41, 0.38, False),
+    "counter-gank": (0.20, 0.23, 0.11, False),
+    "jungle-tracking": (0.68, 0.71, 0.68, False),
+    "power-spikes": (0.90, 0.97, 0.91, False),
+}
+GRADED = {k for k, v in VALIDATION.items() if v[3]}
+
+
 def evaluate(facts: dict) -> list[dict]:
+    """채점하는 체크는 pass/fail, 검증에서 티어를 못 가른 체크는 status 'na' + info(측정값)로 돌려준다."""
     out = []
     for cid, (goal, fn) in CHECKS.items():
         status, value = fn(facts)
-        out.append({"concept": cid, "goal": goal, "status": status, "value": value})
+        v = VALIDATION.get(cid)
+        item = {"concept": cid, "goal": goal, "status": status, "value": value, "graded": cid in GRADED,
+                "validation": {"pro": v[0], "challenger": v[1], "platinum": v[2]} if v else None}
+        if cid not in GRADED:
+            item["info"] = value if status != "na" else None
+            item["status"] = "na"
+        out.append(item)
     return out

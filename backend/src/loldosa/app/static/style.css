@@ -369,3 +369,4 @@ svg.board .tok.enemy circle { fill: #c0565b; } svg.board .tok.enemy text { fill:
 @media (max-width: 900px) { .tl-grid { grid-template-columns: 1fr; } }
 .board-legend { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 6px; }
 .board-legend .muted { flex-basis: 100%; font-size: 11px; }
+.info-checks { margin: 6px 0 0; padding-left: 18px; font-size: 13px; color: var(--text2); } .info-checks li { margin: 4px 0; }

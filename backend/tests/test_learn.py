@@ -34,11 +34,17 @@ def test_engine_and_review_concepts_exist():
 def test_evaluate_checks():
     facts = {"camps3": 6, "full_clear_rate": 0.5, "cs10": 60, "cs10_bench": 64, "deaths10": 1, "risky_deaths10": 1,
              "obj_turns": {"DRAGON": {"turn": "late", "took": False}}, "vision_pm": 1.0, "vision_bench": 1.0}
-    res = {c["concept"]: c["status"] for c in evaluate(facts)}
+    out = {c["concept"]: c for c in evaluate(facts)}
+    res = {k: c["status"] for k, c in out.items()}
     assert res["full-clear"] == "pass"
     assert res["clear-efficiency"] == "pass"
-    assert res["turn-tempo"] == "fail" and res["recall-timing"] == "fail"
-    assert res["jungle-tracking"] == "fail"
+    # 검증에서 티어를 못 가른 체크는 채점하지 않고 참고 값만 남긴다
+    assert res["turn-tempo"] == "na" and out["turn-tempo"]["info"] and not out["turn-tempo"]["graded"]
+    assert res["jungle-tracking"] == "na" and out["jungle-tracking"]["info"]
+    # 귀환 체크: 첫 귀환 5:00 넘김 / 골드 들고 죽음만 실패
+    assert {c["concept"]: c["status"] for c in evaluate({"first_recall_s": 320})}["recall-timing"] == "fail"
+    assert {c["concept"]: c["status"] for c in evaluate({"first_recall_s": 250})}["recall-timing"] == "pass"
+    assert {c["concept"]: c["status"] for c in evaluate({"first_recall_s": 250, "gold_death": 1500})}["recall-timing"] == "fail"
     # 풀클을 잘 안 하는 챔피언은 4캠프면 통과
     assert {c["concept"]: c["status"] for c in evaluate({"camps3": 4, "full_clear_rate": 0.2})}["full-clear"] == "pass"
     assert {c["concept"]: c["status"] for c in evaluate({})}["vision-control"] == "na"

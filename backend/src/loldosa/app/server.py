@@ -207,10 +207,10 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
 
     @app.get("/api/learn")
     async def learn_index():
-        from ..learn.skills import CHECKS
+        from ..learn.skills import CHECKS, GRADED
 
         items = [{**{k: c.get(k) for k in ("id", "category", "title", "en", "level", "summary", "aliases")},
-                  "measurable": c["id"] in CHECKS}
+                  "measurable": c["id"] in GRADED}
                  for c in library.get("concepts", [])]
         return {"version": library.get("version", ""), "categories": library.get("categories", []),
                 "concepts": items, "read": progress.data["read"], "quiz": progress.data["quiz"],
@@ -223,7 +223,7 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
             raise HTTPException(404, "없는 개념이에요")
         progress.mark_read(cid)
         related = [{"id": r, "title": by_id[r]["title"]} for r in c.get("related", []) if r in by_id]
-        from ..learn.skills import CHECKS
+        from ..learn.skills import CHECKS, GRADED
 
         hist = [{"date": h["date"], "champion": h["champion"],
                  "status": h["checks"][0]["status"] if h["checks"] else "na",
@@ -369,17 +369,19 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
         c = by_id.get(cid)
         if not c:
             return None
-        from ..learn.skills import CHECKS
+        from ..learn.skills import CHECKS, GRADED
         return {"id": cid, "title": c["title"], "summary": c.get("summary"), "how": (c.get("how") or [])[:3],
                 "goal": CHECKS[cid][0] if cid in CHECKS else None}
 
     @app.get("/api/home")
     async def home():
-        from ..learn.skills import CHECKS
+        from ..learn.skills import CHECKS, GRADED
 
         rates = progress.skill_rates(10)
         skills = []
         for cid, (goal, _) in CHECKS.items():
+            if cid not in GRADED:
+                continue
             r = rates.get(cid, {"pass": 0, "total": 0})
             skills.append({"id": cid, "title": by_id.get(cid, {}).get("title", cid), "goal": goal,
                            "pass": r["pass"], "total": r["total"]})
@@ -392,6 +394,9 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
                                   "status": h["checks"][0]["status"] if h["checks"] else "na",
                                   "value": h["checks"][0]["value"] if h["checks"] else ""}
                                  for h in progress.history(user.focus_concept, 10)]}
+            if user.focus_concept not in GRADED:
+                focus["note"] = ("이 목표는 실제 경기 검증에서 프로·챌린저와 플래티넘 사이 차이가 없어서 더 이상 채점하지 않아요. "
+                                 "아래에서 다른 연습 목표를 골라 주세요.")
         from ..learn.library import effect_report, rank_label
 
         for x in skills:
@@ -406,11 +411,11 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
 
     @app.put("/api/focus")
     async def set_focus(body: dict = Body(...)):
-        from ..learn.skills import CHECKS
+        from ..learn.skills import CHECKS, GRADED
 
         cid = body.get("concept", "")
-        if cid and cid not in CHECKS:
-            raise HTTPException(400, "경기 기록으로 체크할 수 있는 개념만 연습 목표로 정할 수 있어요")
+        if cid and cid not in GRADED:
+            raise HTTPException(400, "실제 경기 검증을 통과한 체크가 있는 개념만 연습 목표로 정할 수 있어요")
         from datetime import datetime, timezone
 
         if cid != user.focus_concept:

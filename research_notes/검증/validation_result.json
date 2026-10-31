@@ -1,0 +1,224 @@
+{
+ "pro": {
+  "players": 12,
+  "games": 120,
+  "checks": {
+   "full-clear": {
+    "pass": 77,
+    "total": 120,
+    "rate": 0.642
+   },
+   "clear-efficiency": {
+    "pass": 98,
+    "total": 118,
+    "rate": 0.831
+   },
+   "turn-tempo": {
+    "pass": 53,
+    "total": 120,
+    "rate": 0.442
+   },
+   "recall-timing": {
+    "pass": 71,
+    "total": 120,
+    "rate": 0.592
+   },
+   "objective-setup": {
+    "pass": 80,
+    "total": 120,
+    "rate": 0.667
+   },
+   "jungle-tracking": {
+    "pass": 81,
+    "total": 120,
+    "rate": 0.675
+   },
+   "counter-gank": {
+    "pass": 24,
+    "total": 120,
+    "rate": 0.2
+   },
+   "vision-control": {
+    "pass": 92,
+    "total": 118,
+    "rate": 0.78
+   },
+   "power-spikes": {
+    "pass": 108,
+    "total": 120,
+    "rate": 0.9
+   }
+  },
+  "moments": {
+   "n": 469,
+   "agree_rate": 0.527,
+   "top1_rate": 0.388,
+   "by_reason": {
+    "죽기 30초 전": {
+     "agree": 93,
+     "n": 232
+    },
+    "상대 정글 갱 직전": {
+     "agree": 67,
+     "n": 101
+    },
+    "3:00": {
+     "agree": 14,
+     "n": 23
+    },
+    "1분 전": {
+     "agree": 73,
+     "n": 113
+    }
+   }
+  }
+ },
+ "challenger": {
+  "players": 8,
+  "games": 96,
+  "checks": {
+   "full-clear": {
+    "pass": 73,
+    "total": 96,
+    "rate": 0.76
+   },
+   "clear-efficiency": {
+    "pass": 90,
+    "total": 96,
+    "rate": 0.938
+   },
+   "turn-tempo": {
+    "pass": 39,
+    "total": 95,
+    "rate": 0.411
+   },
+   "recall-timing": {
+    "pass": 55,
+    "total": 96,
+    "rate": 0.573
+   },
+   "objective-setup": {
+    "pass": 52,
+    "total": 96,
+    "rate": 0.542
+   },
+   "jungle-tracking": {
+    "pass": 68,
+    "total": 96,
+    "rate": 0.708
+   },
+   "counter-gank": {
+    "pass": 22,
+    "total": 96,
+    "rate": 0.229
+   },
+   "vision-control": {
+    "pass": 64,
+    "total": 96,
+    "rate": 0.667
+   },
+   "power-spikes": {
+    "pass": 93,
+    "total": 96,
+    "rate": 0.969
+   }
+  },
+  "moments": {
+   "n": 368,
+   "agree_rate": 0.53,
+   "top1_rate": 0.383,
+   "by_reason": {
+    "죽기 30초 전": {
+     "agree": 76,
+     "n": 175
+    },
+    "3:00": {
+     "agree": 15,
+     "n": 31
+    },
+    "상대 정글 갱 직전": {
+     "agree": 50,
+     "n": 79
+    },
+    "1분 전": {
+     "agree": 54,
+     "n": 83
+    }
+   }
+  }
+ },
+ "platinum": {
+  "players": 10,
+  "games": 63,
+  "checks": {
+   "full-clear": {
+    "pass": 27,
+    "total": 63,
+    "rate": 0.429
+   },
+   "clear-efficiency": {
+    "pass": 29,
+    "total": 61,
+    "rate": 0.475
+   },
+   "turn-tempo": {
+    "pass": 24,
+    "total": 63,
+    "rate": 0.381
+   },
+   "recall-timing": {
+    "pass": 28,
+    "total": 63,
+    "rate": 0.444
+   },
+   "objective-setup": {
+    "pass": 32,
+    "total": 63,
+    "rate": 0.508
+   },
+   "jungle-tracking": {
+    "pass": 43,
+    "total": 63,
+    "rate": 0.683
+   },
+   "counter-gank": {
+    "pass": 7,
+    "total": 63,
+    "rate": 0.111
+   },
+   "vision-control": {
+    "pass": 32,
+    "total": 61,
+    "rate": 0.525
+   },
+   "power-spikes": {
+    "pass": 57,
+    "total": 63,
+    "rate": 0.905
+   }
+  },
+  "moments": {
+   "n": 249,
+   "agree_rate": 0.41,
+   "top1_rate": 0.293,
+   "by_reason": {
+    "상대 정글 갱 직전": {
+     "agree": 35,
+     "n": 65
+    },
+    "1분 전": {
+     "agree": 19,
+     "n": 43
+    },
+    "죽기 30초 전": {
+     "agree": 41,
+     "n": 131
+    },
+    "3:00": {
+     "agree": 7,
+     "n": 10
+    }
+   }
+  }
+ }
+}

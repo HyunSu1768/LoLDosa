@@ -25,6 +25,7 @@ def run_group(store_path: Path, players: dict, stats: StatsDB, champs) -> dict:
     checks = defaultdict(lambda: [0, 0])
     moments = {"n": 0, "agree": 0, "top1": 0, "by_reason": defaultdict(lambda: [0, 0])}
     games = 0
+    raw = []  # 게임별 측정값: 통과/실패 기준을 바꾸기 전에 분포 자체를 비교하려고 남긴다
     for puuid, mids in players.items():
         for mid in mids:
             try:
@@ -34,6 +35,12 @@ def run_group(store_path: Path, players: dict, stats: StatsDB, champs) -> dict:
             if not rv.is_jungle:
                 continue
             games += 1
+            f = rv.facts
+            raw.append({k: f.get(k) for k in ("camps3", "cs10", "cs10_bench", "deaths10", "risky_deaths10", "enemy_ganks10",
+                                              "far_lost", "traded", "gold_death", "vision_pm", "first_recall_s", "bad_band_fight")}
+                       | {"dragon_turn": (f.get("obj_turns") or {}).get("DRAGON", {}).get("turn"),
+                          "dragon_took": (f.get("obj_turns") or {}).get("DRAGON", {}).get("took"),
+                          "win": rv.summary.get("win")})
             for c in rv.checks:
                 if c["status"] != "na":
                     checks[c["concept"]][1] += 1
@@ -51,7 +58,7 @@ def run_group(store_path: Path, players: dict, stats: StatsDB, champs) -> dict:
                     moments["by_reason"][key][1] += 1
                     moments["by_reason"][key][0] += ok
     store.close()
-    return {"players": len(players), "games": games,
+    return {"players": len(players), "games": games, "raw": raw,
             "checks": {k: {"pass": v[0], "total": v[1], "rate": round(v[0] / v[1], 3) if v[1] else None} for k, v in checks.items()},
             "moments": {"n": moments["n"], "agree_rate": round(moments["agree"] / moments["n"], 3) if moments["n"] else None,
                         "top1_rate": round(moments["top1"] / moments["n"], 3) if moments["n"] else None,

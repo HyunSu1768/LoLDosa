@@ -576,13 +576,8 @@ class Reviewer:
                     f"{josa(name, '이가')} {mmss(t)}에 잡혔는데, 그 직전 30초 안에 나는 귀환해서 본진에 있었어요."
                     + (f" 고티어에서 이런 팀이 가져간 비율은 {pct(late_rate)}뿐이에요." if late_rate is not None else "")
                     + f" {lo}~{hi} 사이에 미리 귀환해서 정비하고 자리를 잡았어야 해요.", 3, ev))
-            elif (turn == "none" and not took and prep_rate is not None
-                  and prep_rate - none_rate >= 0.05 and min(pg, stats["none"]["games"]) >= 30):
-                rv.lessons.append(Lesson(
-                    f"{mmss(t)} {name} 전 귀환 타이밍 놓침",
-                    f"{josa(name, '을를')} 내주기 전 {lo}~{hi}에 귀환해서 정비하지 않았어요."
-                    + (f" 고티어에서 미리 귀환한 팀은 {pct(prep_rate)}, 안 한 팀은 {pct(none_rate)} 가져갔어요."
-                       if prep_rate is not None else ""), 2, ev))
+            # '미리 귀환 안 함'은 지적하지 않는다: 프로·챌린저·플래티넘 모두 40% 안팎만 미리 귀환했고
+            # 프로 경기에선 미리 귀환한 팀(62%)과 안 한 팀(63%)의 획득률이 같았다 (research_notes/검증/검증 결과.md).
             elif turn in ("sync", "jg_only") and took:
                 rv.strengths.append(Lesson(f"{name} 전 귀환 타이밍 좋음", f"{lo}~{hi}에 미리 귀환해서 {josa(name, '을를')} 가져갔어요.",
                                            1, ev))

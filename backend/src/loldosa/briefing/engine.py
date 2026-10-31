@@ -572,8 +572,8 @@ class BriefingEngine:
             card.add(f"{OBJ_TURN_KO[obj]} 귀환 타이밍별 획득률: 미리 귀환 {pct(tf['rate']['prep'])} / 안 함 {pct(tf['rate']['none'])} / "
                      f"직전 30초 안에 귀환 {pct(tf['rate']['late'])}", tf["eid"])
             if tf["useful"]:
-                card.add(f"{josa(OBJ_TURN_KO[obj], '이가')} 잡히기 0:40~2:30 전에 미리 귀환해서 정비한 팀이 더 자주 가져가요. "
-                         f"잡히기 직전 30초 안에 귀환하면 거의 내줘요.",
+                card.add(f"{josa(OBJ_TURN_KO[obj], '이가')} 잡히기 직전 30초 안에 귀환하면 거의 내줘요. "
+                         f"귀환이 필요하면 0:40~2:30 전에 끝내 두세요. (미리 귀환 자체의 효과는 프로 경기 검증에서 뚜렷하지 않았어요)",
                          tf["eid"], kind="inference")
         c = self.stats.champ(s, champ)
         if c:
@@ -773,9 +773,8 @@ class BriefingEngine:
             tf = turns.get(obj)
             if tf and tf["useful"] and tf["median"]:
                 lo, hi = tf["median"] - 150, tf["median"] - 40
-                plan.append(PlanLine("귀환", f"{OBJ_TURN_KO[obj]}(고티어 {mmss(tf['median'])}) 기준 {mmss(lo)}~{mmss(hi)}에 귀환해서 정비 "
-                                     f"→ 미리 귀환한 팀 {pct(tf['rate']['prep'])} vs 안 한 팀 {pct(tf['rate']['none'])}. "
-                                     f"직전 30초 귀환은 {pct(tf['rate']['late'])}", [tf["eid"]]))
+                plan.append(PlanLine("귀환", f"{OBJ_TURN_KO[obj]}(고티어 {mmss(tf['median'])}) 직전 30초엔 본진에 있지 않기 "
+                                     f"→ 그때 귀환한 팀은 {pct(tf['rate']['late'])}만 가져감. 귀환할 거면 {mmss(lo)}~{mmss(hi)}에", [tf["eid"]]))
                 break
         sc = f.get("scaling")
         if sc:
