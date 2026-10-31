@@ -15,8 +15,16 @@ from .champselect import ChampSelectState, parse_session
 
 
 def load_sessions(path: Path) -> list[dict | None]:
-    lines = path.read_text(encoding="utf-8").splitlines()
-    return [json.loads(line) for line in lines if line.strip()]
+    """녹화 파일(한 줄 = 세션)과 진단 기록(한 줄 = {"t", "data": 세션}) 둘 다 읽는다."""
+    out = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        x = json.loads(line)
+        if isinstance(x, dict) and set(x) == {"t", "data"}:
+            x = x["data"]
+        out.append(x)
+    return out
 
 
 async def replay(path: Path, interval: float = 1.0) -> AsyncIterator[ChampSelectState | None]:

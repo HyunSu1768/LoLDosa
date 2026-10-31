@@ -21,3 +21,19 @@ def test_ignores_other_queues():
     d = GameEndDetector()
     d.feed("InProgress", sess(5, q=450))  # 칼바람
     assert d.feed("EndOfGame", None) is None
+
+
+def test_diagnostic_champselect_is_replayable(tmp_path):
+    """진단 기록의 챔선 파일을 --replay 로 그대로 다시 틀 수 있어야 한다."""
+    import json
+    from pathlib import Path
+
+    from loldosa.lcu.postgame import diag_write
+    from loldosa.lcu.replay import load_sessions
+
+    sample = Path(__file__).resolve().parents[1] / "samples" / "champselect_ranked_jungle.jsonl"
+    sessions = [json.loads(x) for x in sample.read_text(encoding="utf-8").splitlines() if x.strip()]
+    for s in sessions:
+        diag_write(tmp_path, "champselect", s)
+    f = next(tmp_path.glob("champselect_*.jsonl"))
+    assert load_sessions(f) == sessions

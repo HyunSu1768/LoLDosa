@@ -16,6 +16,8 @@ OUT = Path(sys.argv[1])
 N_PLAYERS, GAMES = int(sys.argv[2]), int(sys.argv[3])
 TIER = sys.argv[4] if len(sys.argv) > 4 else "PLATINUM"
 PAGE = int(sys.argv[5]) if len(sys.argv) > 5 else 1
+# 6번째 인자: 이 날짜(유닉스 초) 이후 경기만 (최근 패치 표본을 모을 때). 예: 3패치 ≈ 42일 전
+START = int(sys.argv[6]) if len(sys.argv) > 6 else None
 
 
 async def main():
@@ -29,7 +31,7 @@ async def main():
         for e in entries:
             if len(picked) >= N_PLAYERS:
                 break
-            ids = await riot.match_ids(e["puuid"], count=15)
+            ids = await riot.match_ids(e["puuid"], count=15, start_time=START)
             jungle = []
             for mid in ids:
                 if len(jungle) >= GAMES:

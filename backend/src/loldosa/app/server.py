@@ -163,6 +163,16 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
     async def postgame(game_id: int, tries: int = 20, wait_s: float = 30.0) -> dict | None:
         from ..riot.client import RiotClient
 
+        mid = f"{settings.platform.upper()}_{game_id}"
+        if user.puuid:  # 이미 받아 둔 경기면 API 없이 바로 복기
+            async with personal_lock:
+                with personal_store() as st:
+                    have = st.has_match(mid)
+                if have:
+                    msg = postgame_message(await asyncio.to_thread(_review, mid), mid)
+            if have:
+                await hub.send(msg)
+                return msg
         if not settings.riot_api_key or not user.puuid:
             await hub.send({"type": "postgame", "status": "need_setup",
                             "message": "게임이 끝났어요. 자동 복기를 하려면 경기 복기 탭에서 Riot ID를 한 번 불러와 주세요."})
