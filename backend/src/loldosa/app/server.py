@@ -93,9 +93,12 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        task = asyncio.create_task(watcher())
+        tasks = [asyncio.create_task(watcher())]
+        if not replay:
+            tasks.append(asyncio.create_task(postgame_watcher()))
         yield
-        task.cancel()
+        for t in tasks:
+            t.cancel()
 
     app = FastAPI(title="LoLDosa", lifespan=lifespan)
     app.state.hub = hub
@@ -141,6 +144,90 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
             log.exception("챔선 감시 중 오류")
             await hub.send({"type": "error", "message": "챔피언 선택 감시 중 오류가 났어요. 터미널 로그를 확인하세요."})
 
+    DIAG = settings.data_dir / "diagnostics"
+
+    async def postgame_watcher() -> None:
+        """게임이 끝나면 경기를 받아 바로 복기하고, 핵심 하나를 화면에 띄운다."""
+        from ..lcu.postgame import watch_game_end
+
+        try:
+            async for ev in watch_game_end(log_dir=DIAG):
+                asyncio.create_task(postgame(ev["game_id"]))
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("게임 종료 감시 중 오류")
+
+    async def postgame(game_id: int, tries: int = 20, wait_s: float = 30.0) -> dict | None:
+        from ..riot.client import RiotClient
+
+        if not settings.riot_api_key or not user.puuid:
+            await hub.send({"type": "postgame", "status": "need_setup",
+                            "message": "게임이 끝났어요. 자동 복기를 하려면 경기 복기 탭에서 Riot ID를 한 번 불러와 주세요."})
+            return None
+        mid = f"{settings.platform.upper()}_{game_id}"
+        await hub.send({"type": "postgame", "status": "waiting", "match_id": mid,
+                        "message": "게임 끝! Riot 서버에 경기 기록이 올라오면 바로 복기할게요 (보통 1~3분)."})
+        async with RiotClient(settings.riot_api_key, settings.platform, settings.region) as riot:
+            for _ in range(tries):
+                match = await riot.match(mid)
+                timeline = await riot.timeline(mid) if match else None
+                if match and timeline:
+                    async with personal_lock:
+                        with personal_store() as st:
+                            if not st.has_match(mid):
+                                st.save_raw(mid, match, timeline)
+                                st.ingest(match, timeline, "personal")
+                        rv = await asyncio.to_thread(_review, mid)
+                    msg = postgame_message(rv, mid)
+                    await hub.send(msg)
+                    return msg
+                await asyncio.sleep(wait_s)
+        await hub.send({"type": "postgame", "status": "timeout", "match_id": mid,
+                        "message": "경기 기록이 아직 안 올라왔어요. 조금 뒤 경기 복기 탭에서 불러와 주세요."})
+        return None
+
+    def postgame_message(rv: dict, mid: str) -> dict:
+        """복기 결과에서 '이번 판 핵심 하나'와 연습 목표 결과, 가장 아쉬운 실력 지표 하나."""
+        sm = rv["summary"]
+        kl = rv.get("key_lesson") or {}
+        lesson = (kl.get("lesson") or {}) if kl else {}
+        focus = next((c for c in rv["checks"] if c.get("focus") and c["status"] != "na"), None)
+        worst = next((g for g in rv.get("gap", []) if not g["ok"]), None)
+        return {"type": "postgame", "status": "ready", "match_id": mid, "champion": sm.get("champion"),
+                "win": sm.get("win"), "is_jungle": rv.get("is_jungle"),
+                "lesson": {"title": lesson.get("title"), "text": lesson.get("text")} if lesson else None,
+                "focus": {"title": focus["title"], "status": focus["status"], "value": focus["value"]} if focus else None,
+                "gap": worst}
+
+    @app.post("/api/postgame/test")
+    async def postgame_test(body: dict = Body(...)):
+        """게임 없이 자동 복기 흐름을 확인: 이미 받은 경기 id 로 알림을 띄운다."""
+        mid = body.get("match_id", "")
+        async with personal_lock:
+            rv = await asyncio.to_thread(_review, mid)
+        msg = postgame_message(rv, mid)
+        await hub.send(msg)
+        return msg
+
+    @app.get("/api/diagnostics")
+    async def diagnostics():
+        """진단 기록 묶음(zip): 실제 클라이언트에서 문제가 생기면 이 파일 하나를 보내 주면 돼요."""
+        import io
+        import zipfile
+
+        from fastapi.responses import Response
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            for f in sorted(DIAG.glob("*.jsonl")) if DIAG.exists() else []:
+                z.write(f, f.name)
+            log_file = settings.data_dir / "loldosa.log"
+            if log_file.exists():
+                z.write(log_file, "loldosa.log")
+        return Response(buf.getvalue(), media_type="application/zip",
+                        headers={"Content-Disposition": "attachment; filename=loldosa_diagnostics.zip"})
+
     async def _watch() -> None:
         if replay:
             from ..lcu.replay import replay as replay_source
@@ -150,7 +237,7 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
                     await on_state(st)
         else:
             from ..lcu.client import watch_champ_select
-            async for st in watch_champ_select():
+            async for st in watch_champ_select(log_dir=DIAG):
                 await on_state(st)
 
     @app.get("/")

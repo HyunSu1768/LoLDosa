@@ -388,3 +388,12 @@ svg.board .tok.enemy circle { fill: #c0565b; } svg.board .tok.enemy text { fill:
 .gap-power { font-size: 11px; color: var(--muted); text-align: right; }
 .gap-strength { margin-top: 10px; font-size: 13px; }
 .small-note { font-size: 12px; margin: -2px 0 6px; }
+
+/* 게임 끝 알림 */
+#postgame { position: fixed; right: 18px; bottom: 18px; z-index: 50; max-width: 420px; }
+.pg-card { position: relative; background: var(--panel, #121a24); border: 1px solid var(--gold2); border-radius: 14px; padding: 16px 18px; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
+.pg-title { font-weight: 800; margin-right: 24px; margin-bottom: 8px; }
+.pg-focus { padding: 8px 10px; border-radius: 8px; margin-bottom: 8px; font-size: 13px; background: rgba(255,255,255,.04); }
+.pg-focus.pass { border-left: 3px solid var(--good); } .pg-focus.fail { border-left: 3px solid var(--bad); }
+.pg-lesson .label { font-size: 11px; color: var(--muted); } .pg-lesson p { margin: 4px 0 8px; font-size: 13px; color: var(--text2); }
+.pg-gap { font-size: 12px; color: var(--gold); margin-bottom: 10px; }

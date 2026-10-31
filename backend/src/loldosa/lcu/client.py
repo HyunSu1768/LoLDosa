@@ -45,7 +45,7 @@ class LcuClient:
         return await self.get("/lol-summoner/v1/current-summoner")
 
 
-async def watch_champ_select(interval: float = 1.0) -> AsyncIterator[ChampSelectState | None]:
+async def watch_champ_select(interval: float = 1.0, log_dir=None) -> AsyncIterator[ChampSelectState | None]:
     """챔피언 선택 상태가 의미 있게 바뀔 때마다 yield. 챔선이 끝나면 None 을 한 번 yield.
 
     클라이언트가 꺼져 있거나 재시작돼도 다시 접속을 시도한다.
@@ -72,11 +72,17 @@ async def watch_champ_select(interval: float = 1.0) -> AsyncIterator[ChampSelect
             if session is None:
                 if last_sig is not None:
                     last_sig = None
+                    if log_dir:
+                        from .postgame import diag_write
+                        diag_write(log_dir, "champselect", None)
                     yield None
             else:
                 state = parse_session(session)
                 if (sig := state.signature()) != last_sig:
                     last_sig = sig
+                    if log_dir:  # 녹화 형식과 같아서 `--replay` 로 그대로 다시 틀어 볼 수 있다
+                        from .postgame import diag_write
+                        diag_write(log_dir, "champselect", session)
                     yield state
             await asyncio.sleep(interval)
     finally:

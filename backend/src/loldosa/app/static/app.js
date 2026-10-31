@@ -403,8 +403,39 @@ function connect() {
     if (msg.type === "briefing") onBriefing(msg);
     else if (msg.type === "ai") renderAI(msg);
     else if (msg.type === "ended") $("ended-banner").classList.remove("hidden");
+    else if (msg.type === "postgame") onPostgame(msg);
   };
 }
+
+/* ---------------- 게임 끝나면: 이번 판 핵심 하나 ---------------- */
+function onPostgame(msg) {
+  let box = $("postgame");
+  if (!box) { box = document.createElement("div"); box.id = "postgame"; document.body.appendChild(box); }
+  const seenKey = `pg:${msg.match_id}:${msg.status}`;
+  if (msg.match_id && localStorage.getItem(seenKey)) return;
+  const close = `<button class="modal-x" onclick="dismissPostgame('${seenKey}')">✕</button>`;
+  if (msg.status !== "ready") {
+    box.innerHTML = `<div class="pg-card">${close}<div class="pg-title">${msg.status === "waiting" ? "⏳ " : ""}${esc(msg.message)}</div></div>`;
+    return;
+  }
+  const res = msg.win ? `<span class="res-win">승리</span>` : `<span class="res-loss">패배</span>`;
+  box.innerHTML = `<div class="pg-card">${close}
+    <div class="pg-title">방금 판 · ${esc(msg.champion || "")} ${res}</div>
+    ${msg.focus ? `<div class="pg-focus ${msg.focus.status}">연습 목표 <b>${esc(msg.focus.title)}</b> ${msg.focus.status === "pass" ? "지킴 ✓" : "못 지킴 ✗"}<div class="muted">${esc(msg.focus.value)}</div></div>` : ""}
+    ${msg.lesson && msg.lesson.title ? `<div class="pg-lesson"><div class="label">이번 판 핵심 하나</div><b>${esc(msg.lesson.title)}</b><p>${linkify(msg.lesson.text || "")}</p></div>` : `<div class="pg-lesson"><b>눈에 띄는 큰 실수는 없었어요 👍</b></div>`}
+    ${msg.gap ? `<div class="pg-gap">챌린저와 차이: <b>${esc(msg.gap.label)}</b> ${esc(msg.gap.mine_text)} (기준 ${esc(msg.gap.threshold_text)}) · ${esc(msg.gap.drill)}</div>` : ""}
+    <div class="row"><button class="primary" onclick="openPostgame('${msg.match_id}', '${seenKey}')">자세히 복기하기</button></div></div>`;
+  try { if (window.Notification && Notification.permission === "granted") new Notification("LoLDosa · 방금 판 복기", { body: (msg.lesson && msg.lesson.title) || "복기가 준비됐어요" }); } catch (e) {}
+}
+function dismissPostgame(key) { localStorage.setItem(key, "1"); const b = $("postgame"); if (b) b.innerHTML = ""; }
+async function openPostgame(mid, key) {
+  dismissPostgame(key);
+  showTab("review");
+  await ensureChamps().catch(() => {});
+  openReview(mid);
+}
+window.dismissPostgame = dismissPostgame; window.openPostgame = openPostgame;
+if (window.Notification && Notification.permission === "default") { try { Notification.requestPermission(); } catch (e) {} }
 
 /* ---------------- 경기 복기 ---------------- */
 let champMap = {};
