@@ -159,3 +159,6 @@ button.row, a.row, .row.click { cursor: pointer; }
 /* ---------- 근거(n=…) : 기본 숨김, 설정에서 켜기 (§1.4 점진적 공개) ---------- */
 .ev { display: none; margin-left: 6px; font-size: 11px; color: var(--grey500); background: var(--bg-sunken); border-radius: 5px; padding: 1px 6px; cursor: help; }
 body.show-ev .ev { display: inline-block; }
+/* 시트 자체에 포커스를 줄 때(열릴 때) 테두리는 그리지 않는다. 시트 안의 grey 버튼은 시트(#2C2C35)보다 한 단계 밝게 */
+.sheet:focus { outline: none; }
+.sheet .btn.grey { background: var(--grey200); }

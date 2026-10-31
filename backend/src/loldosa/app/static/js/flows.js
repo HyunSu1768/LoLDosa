@@ -71,3 +71,62 @@ export function onPostgame(msg) {
     if (e.target.closest("[data-pg-open]")) { localStorage.setItem(seen, "1"); box.innerHTML = ""; go(`#/review/${msg.match_id}`); }
   };
 }
+
+/* ---------- Claude 준비: 설치(공식 스크립트) → 로그인(공식 창) ----------
+ * 토큰은 앱이 다루지 않는다. 로그인은 Claude 의 공식 브라우저 로그인으로 사용자가 직접 한다. */
+import { api as _api, post as _post, toast as _toast } from "./core.js";
+
+export async function claudeSetupSheet({ reason = "", after } = {}) {
+  let st = await _api("/api/claude").catch(() => ({ installed: false }));
+  const sh = openSheet("", { onClose: after });
+  const draw = () => {
+    const step = !st.installed ? "install" : !st.logged_in ? "login" : "done";
+    sh.innerHTML = `<button class="close" aria-label="닫기" data-close>✕</button>
+      <div class="eyebrow">AI 코치 준비</div>
+      <h2>${step === "install" ? "Claude를 먼저 설치할게요" : step === "login" ? "Claude에 로그인해 주세요" : "AI 코치를 쓸 수 있어요"}</h2>
+      ${reason ? `<p class="sub">${esc(reason)}</p>` : ""}
+      <ol class="steps3">
+        <li class="${st.installed ? "done" : "on"}">Claude 설치 <span class="sub">Anthropic 공식 설치 스크립트로 설치해요</span></li>
+        <li class="${st.logged_in ? "done" : st.installed ? "on" : ""}">Claude 로그인 <span class="sub">새 창에서 브라우저가 열려요. 쓰고 있는 Claude 구독 계정으로 로그인해요</span></li>
+        <li class="${st.logged_in ? "done" : ""}">AI 코치 사용</li>
+      </ol>
+      <p class="sub" id="cl-msg">${step === "done" ? "브리핑과 복기에서 AI 코치 정리를 볼 수 있어요." : "LoLDosa는 로그인 정보를 보거나 저장하지 않아요. 로그인은 Claude가 직접 처리해요."}</p>
+      <div class="btn-row end">
+        ${step === "done" ? `<button class="btn fill m" data-close>다 됐어요</button>` : `<button class="btn grey m" data-close>다음에</button>`}
+        ${step === "install" ? `<button class="btn fill m" id="cl-go">Claude 설치하기</button>` : ""}
+        ${step === "login" ? `<button class="btn fill m" id="cl-go">Claude 로그인하기</button>` : ""}
+      </div>`;
+    $("#cl-go", sh)?.addEventListener("click", step === "install" ? doInstall : doLogin);
+  };
+  const doInstall = async () => {
+    $("#cl-go", sh).disabled = true;
+    $("#cl-msg", sh).textContent = "설치하는 중이에요. 1~2분 걸려요.";
+    const r = await _post("/api/claude/install").catch((e) => ({ ok: false, log: e.message }));
+    st = { ...st, ...r };
+    if (!r.ok) { draw(); $("#cl-msg", sh).innerHTML = `<span class="bad">설치하지 못했어요.</span> 인터넷 연결을 확인하고 다시 눌러 주세요.`; return; }
+    _toast("Claude를 설치했어요"); draw();
+  };
+  const doLogin = async () => {
+    const r = await _post("/api/claude/login").catch((e) => ({ ok: false, message: e.message }));
+    $("#cl-msg", sh).textContent = r.message || "";
+    if (!r.ok) return;
+    $("#cl-go", sh).disabled = true;
+    for (let i = 0; i < 60 && document.body.contains(sh); i++) {  // 3분 동안 3초마다 로그인됐는지 확인
+      await new Promise((ok) => setTimeout(ok, 3000));
+      st = await _api("/api/claude").catch(() => st);
+      if (st.logged_in) { _toast("Claude에 로그인했어요"); draw(); return; }
+    }
+    if (document.body.contains(sh)) { $("#cl-go", sh).disabled = false; $("#cl-msg", sh).textContent = "아직 로그인이 안 됐어요. 열린 창에서 로그인을 끝낸 뒤 다시 눌러 주세요."; }
+  };
+  draw();
+}
+
+/** 앱을 켤 때: AI 코치가 켜져 있는데 준비가 안 됐으면 하루에 한 번만 묻는다 (매번 묻지 않게). */
+export async function checkClaudeOnStart() {
+  const st = await _api("/api/claude").catch(() => null);
+  if (!st || !st.ai_enabled || (st.installed && st.logged_in)) return;
+  const last = +localStorage.getItem("claudeAskedAt") || 0;
+  if (Date.now() - last < 24 * 3600 * 1000) return;
+  localStorage.setItem("claudeAskedAt", String(Date.now()));
+  claudeSetupSheet({ reason: "AI 코치가 켜져 있는데 Claude가 준비되지 않았어요. 설정에서 AI 코치를 끄면 다시 묻지 않아요." });
+}

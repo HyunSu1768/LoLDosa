@@ -6,7 +6,7 @@ import { hasLiveBriefing, onBriefingMessage, renderBrief } from "./brief.js";
 import { renderReview, renderReviewList } from "./review.js";
 import { renderConcept, renderLearn } from "./learn.js";
 import { renderSettings } from "./settings.js";
-import { onPostgame } from "./flows.js";
+import { checkClaudeOnStart, onPostgame } from "./flows.js";
 
 route(/^#\/home$/, renderHome);
 route(/^#\/brief$/, renderBrief);
@@ -48,4 +48,5 @@ connect();
 setInterval(status, 15000);
 if (!location.hash) location.hash = "#/home";
 render();
+setTimeout(checkClaudeOnStart, 1500);
 if (window.Notification?.permission === "default") { try { Notification.requestPermission(); } catch {} }

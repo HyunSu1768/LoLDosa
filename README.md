@@ -52,7 +52,12 @@ cd backend
 uv sync --extra app --extra kb   # app: 데스크톱 창, kb: 유튜브 자막
 ```
 
-AI 코치와 가이드 추출을 쓰려면 [Claude Code](https://code.claude.com) 를 설치하고 터미널에서 `claude` 를 한 번 실행해
+**AI 코치(선택):** 앱의 설정 → "Claude 설치하기"를 누르면 Anthropic 공식 설치 스크립트로 Claude Code를 설치해요. 이어서 "Claude 로그인하기"를 누르면 새 창에서 Claude 공식 로그인(`claude auth login`)이 열려요. AI 코치가 켜져 있는데 준비가 안 됐으면 앱을 켤 때 하루 한 번 알려 줘요.
+
+- **바이너리를 설치 파일에 넣지 않는 이유:** Anthropic 약관상 Claude Code를 다른 제품에 넣어 배포하려면 상업 약관 계약이 필요해요. 약관에 따라 사용자가 Anthropic의 공식 흐름으로 직접 설치하고 로그인해요.
+- **로그인 정보:** LoLDosa는 로그인 정보를 보거나 저장하지 않아요.
+
+터미널에서 직접 하려면: AI 코치와 가이드 추출을 쓰려면 [Claude Code](https://code.claude.com) 를 설치하고 터미널에서 `claude` 를 한 번 실행해
 구독 계정으로 로그인해 두세요. API 키는 필요 없습니다.
 
 이후 명령은 모두 `backend/` 폴더에서 `uv run loldosa ...` 로 실행합니다.

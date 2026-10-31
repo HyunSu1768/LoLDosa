@@ -1,11 +1,13 @@
 /* 설정: 꼭 필요한 것만, 바꾸면 바로 저장 (저장 버튼 없음).
  * S1 없으면 목표를 못 이루는 것만 · S2 에러는 상황→원인→고치는 버튼 · S3 보조 버튼은 「닫기」 · S5 키보드로 모두 조작 */
 import { $, $$, api, champImg, ensureChamps, esc, openSheet, put, row, skeleton, state, toast } from "./core.js";
+import { claudeSetupSheet } from "./flows.js";
 
 export async function renderSettings(view) {
   view.innerHTML = `<div class="page">${skeleton(2)}</div>`;
   await ensureChamps();
-  const [s, key, st] = await Promise.all([api("/api/settings"), api("/api/riot-key").catch(() => ({})), api("/api/status").catch(() => ({}))]);
+  const [s, key, st, cl] = await Promise.all([api("/api/settings"), api("/api/riot-key").catch(() => ({})), api("/api/status").catch(() => ({})),
+    api("/api/claude").catch(() => ({}))]);
   const keyOk = key.set && !key.problem;
   view.innerHTML = `<div class="page">
     <div class="top"><h1>설정</h1></div>
@@ -28,6 +30,9 @@ export async function renderSettings(view) {
     <div class="list">
       <label class="row"><div class="mid"><div class="title">AI 코치</div><div class="sub">Claude 구독으로 브리핑·복기를 한 번 더 정리해요 (10~20초)</div></div>
         <input type="checkbox" class="toggle" data-key="ai_enabled" ${s.ai_enabled ? "checked" : ""}></label>
+      ${row({ lead: cl.logged_in ? "✅" : "🤖", title: !cl.installed ? "Claude가 설치돼 있지 않아요" : !cl.logged_in ? "Claude 로그인이 필요해요" : "Claude에 로그인돼 있어요",
+        sub: !cl.installed ? "눌러서 공식 설치 스크립트로 설치해요" : !cl.logged_in ? "눌러서 Claude 로그인 창을 열어요" : `로그인 방식: ${cl.auth_method === "claude.ai" ? "Claude 구독" : esc(cl.auth_method || "")}`,
+        attrs: 'data-act="claude"' })}
       <label class="row"><div class="mid"><div class="title">근거 판 수 보기</div><div class="sub">문장마다 몇 판을 보고 말했는지 작게 보여 줘요</div></div>
         <input type="checkbox" class="toggle" id="ev" ${document.body.classList.contains("show-ev") ? "checked" : ""}></label>
     </div>
@@ -51,6 +56,7 @@ export async function renderSettings(view) {
     const a = e.target.closest("[data-act]")?.dataset.act;
     if (a === "key") keySheet(() => renderSettings(view));
     if (a === "pool") poolSheet(s.champion_pool || [], () => renderSettings(view));
+    if (a === "claude") claudeSetupSheet({ after: () => renderSettings(view) });
   });
 }
 const seg = (opts, cur) => opts.map(([v, l]) => `<button type="button" data-v="${v}" class="${v === cur ? "on" : ""}">${l}</button>`).join("");

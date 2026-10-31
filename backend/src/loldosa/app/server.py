@@ -331,6 +331,27 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
         await hub.send(msg)
         return msg
 
+    @app.get("/api/claude")
+    async def claude_status():
+        """AI 코치 준비 상태: 설치됐는지, 로그인됐는지 (토큰은 다루지 않고 `claude auth status` 결과만)."""
+        from ..coach.setup import status as claude_st
+
+        return {**await asyncio.to_thread(claude_st), "ai_enabled": user.ai_enabled}
+
+    @app.post("/api/claude/install")
+    async def claude_install():
+        """Anthropic 공식 설치 스크립트 실행."""
+        from ..coach.setup import install
+
+        return await asyncio.to_thread(install)
+
+    @app.post("/api/claude/login")
+    async def claude_login():
+        """새 창에서 공식 로그인(`claude auth login`)을 띄운다. 사용자가 브라우저에서 직접 로그인한다."""
+        from ..coach.setup import open_login
+
+        return await asyncio.to_thread(open_login)
+
     @app.get("/api/riot-key")
     async def riot_key_status():
         from ..config import key_problem

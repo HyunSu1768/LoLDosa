@@ -112,7 +112,7 @@ def explain_failure(envelope: dict | None, stderr: str = "") -> str:
     status = (envelope or {}).get("api_error_status")
     low = reason.lower()
     if status == 401 or "login" in low or "/login" in low or "authenticat" in low or "api key" in low:
-        hint = ("터미널에서 `claude` 를 실행해 /login 으로 구독 계정에 로그인하세요. "
+        hint = ("설정에서 'Claude 로그인하기'를 눌러 구독 계정으로 로그인해 주세요. "
                 "ANTHROPIC_API_KEY 환경변수가 설정돼 있으면 구독 대신 그 키를 쓰니 지우세요.")
     elif "credit" in low or "balance" in low:
         hint = "API 키 결제로 실행되고 있습니다. ANTHROPIC_API_KEY 환경변수를 지우고 구독 계정으로 로그인하세요."
@@ -127,12 +127,32 @@ def explain_failure(envelope: dict | None, stderr: str = "") -> str:
     return f"{reason} → {hint}"
 
 
+from .setup import child_env
+
+
 class ClaudeCoach:
     def __init__(self, model: str | None = None, timeout: float = 90.0) -> None:
-        self.cli = os.getenv("LOLDOSA_CLAUDE_CLI") or shutil.which("claude")
         self.model = model or os.getenv("LOLDOSA_CLAUDE_MODEL", "sonnet")
         self.timeout = timeout
-        self.enabled = bool(self.cli) and os.getenv("LOLDOSA_AI", "1") != "0"
+
+    @property
+    def cli(self) -> str | None:
+        """앱을 켠 뒤에 설치해도 바로 쓰게 매번 찾는다 (PATH 를 새로 읽지 않아도 공식 설치 위치에서 찾음)."""
+        from .setup import find_claude
+
+        return find_claude()
+
+    _enabled: bool | None = None  # 테스트 등에서 강제로 켜고 끌 때
+
+    @property
+    def enabled(self) -> bool:
+        if self._enabled is not None:
+            return self._enabled
+        return bool(self.cli) and os.getenv("LOLDOSA_AI", "1") != "0"
+
+    @enabled.setter
+    def enabled(self, v: bool) -> None:
+        self._enabled = v
 
     def describe(self) -> dict:
         return {"enabled": self.enabled, "cli": self.cli, "model": self.model}
@@ -152,6 +172,7 @@ class ClaudeCoach:
         proc = await asyncio.create_subprocess_exec(
             *self.command(system),
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            env=child_env(),
         )
         try:
             out, err = await asyncio.wait_for(proc.communicate(prompt.encode("utf-8")), self.timeout)
@@ -165,7 +186,7 @@ class ClaudeCoach:
 
     async def coach_review(self, review: dict) -> dict:
         if not self.enabled:
-            return {"status": "disabled", "message": "Claude Code CLI 가 없습니다 (설치 후 `claude` 로그인)."}
+            return {"status": "disabled", "message": "Claude가 설치돼 있지 않아요. 설정에서 'Claude 설치하기'를 눌러 주세요."}
         valid = {e["id"] for e in review.get("evidence", [])}
         try:
             text = await self.run_cli(build_review_prompt(review), system=REVIEW_SYSTEM)
@@ -177,7 +198,7 @@ class ClaudeCoach:
 
     async def coach(self, briefing: dict) -> dict:
         if not self.enabled:
-            return {"status": "disabled", "message": "Claude Code CLI 가 없습니다 (설치 후 `claude` 로그인)."}
+            return {"status": "disabled", "message": "Claude가 설치돼 있지 않아요. 설정에서 'Claude 설치하기'를 눌러 주세요."}
         valid = {e["id"] for e in briefing.get("evidence", [])}
         try:
             text = await self.run_cli(build_prompt(briefing))
