@@ -326,3 +326,10 @@ details.more .card-head { display: flex; gap: 12px; padding: 11px 14px; cursor: 
 .cs { text-align: right; } .co { color: var(--muted); }
 button.small { padding: 5px 10px; font-size: 12px; margin-top: 8px; }
 @media (max-width: 900px) { .mo-body { grid-template-columns: 1fr; } .crowd-row { grid-template-columns: 90px 1fr 36px; } .co { grid-column: 1 / -1; } }
+
+.mastery { margin-left: auto; font-size: 12px; font-weight: 800; padding: 0 7px; border-radius: 99px; border: 1px solid; }
+.mastery.good { color: var(--good); } .mastery.mid { color: var(--warn); } .mastery.bad { color: var(--bad); }
+.mastery-line { margin: 4px 0; font-size: 13px; }
+.panel.due { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-color: rgba(212,180,110,.5); }
+.rank-line { font-size: 13px; color: var(--text2); margin-bottom: 10px; }
+.mo-body.small { grid-template-columns: 240px 1fr; }

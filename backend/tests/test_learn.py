@@ -57,3 +57,40 @@ def test_progress_history_and_rates(tmp_path):
     p.flag({"full-clear"}, "KR_2")
     lib = {"concepts": [{"id": "full-clear", "title": "풀클리어"}]}
     assert Progress(tmp_path).recommended(lib)[0]["count"] == 1
+
+
+def test_mastery_combines_sources(tmp_path):
+    p = Progress(tmp_path)
+    assert p.mastery("full-clear")["score"] is None
+    for i in range(4):
+        p.record_checks(f"KR_{i}", {"date": f"2026-10-0{i + 1}"}, [{"concept": "full-clear", "status": "pass",
+                                                                    "value": "", "goal": ""}], {"camps3": 6})
+    p.record_quiz("full-clear", False)
+    m = p.mastery("full-clear")
+    assert 80 <= m["score"] < 100 and m["n"] == 5
+
+
+def test_srs_boxes(tmp_path):
+    p = Progress(tmp_path)
+    p.schedule("quiz:full-clear", "quiz", {"concept": "full-clear"})
+    assert [x["key"] for x in p.due_items()] == ["quiz:full-clear"]
+    it = p.grade("quiz:full-clear", True)
+    assert it["box"] == 1 and not p.due_items()
+    it = p.grade("quiz:full-clear", False)
+    assert it["box"] == 0
+
+
+def test_baseline_and_effect(tmp_path):
+    from loldosa.learn.library import effect_report, ladder_points
+
+    p = Progress(tmp_path)
+    for i, (d, st, win) in enumerate([("2026-10-01 10:00", "fail", False), ("2026-10-02 10:00", "fail", False),
+                                      ("2026-10-05 10:00", "pass", True), ("2026-10-06 10:00", "pass", True)]):
+        p.record_checks(f"KR_{i}", {"date": d, "win": win},
+                        [{"concept": "full-clear", "status": st, "value": "", "goal": ""}], {"cs10": 50 + i})
+    assert p.baseline(exclude="KR_3")["cs10"] == 51
+    p.record_rank({"tier": "PLATINUM", "rank": "II", "leaguePoints": 40, "wins": 1, "losses": 1})
+    ef = effect_report(p, "full-clear", "2026-10-04T00:00:00")
+    assert ef["before"]["focus_pass"] == 0 and ef["after"]["focus_pass"] == 2 and ef["after"]["wins"] == 2
+    assert ladder_points({"tier": "EMERALD", "rank": "IV", "lp": 0}) - ladder_points(
+        {"tier": "PLATINUM", "rank": "I", "lp": 0}) == 100

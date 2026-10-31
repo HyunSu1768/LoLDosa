@@ -339,3 +339,18 @@ class StatsDB:
             if len(rows) >= 150 or b is None:
                 return rows, label
         return [], ""
+
+    def bucket_avgs(self, bucket: str) -> dict:
+        """티어 전체 정글러 평균 (챔피언 가중). '다음 티어' 비교용."""
+        r = self.one("""SELECT sum(games) AS games,
+                sum(jungle_cs10 * games) / sum(games) AS cs10, sum(deaths10 * games) / sum(games) AS deaths10,
+                sum(vision_pm * games) / sum(games) AS vision_pm, sum(camps3 * games) / sum(games) AS camps3
+            FROM champ_stats WHERE scope = 'ALL' AND bucket = ?""", [bucket])
+        if not r or not r["games"]:
+            return {}
+        if self._has("first_recall"):
+            fr = self.one("""SELECT sum(median_s * games) / sum(games) AS s FROM first_recall
+                             WHERE scope = 'ALL' AND bucket = ?""", [bucket])
+            if fr and fr["s"]:
+                r["first_recall_s"] = fr["s"]
+        return r

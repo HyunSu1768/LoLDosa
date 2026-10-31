@@ -38,6 +38,8 @@ class Metric:
     bench: str
     verdict: str  # good | bad | neutral
     evidence: list[str] = field(default_factory=list)
+    target: str = ""  # 다음 티어 평균
+    me_avg: str = ""  # 내 최근 평균
 
 
 @dataclass

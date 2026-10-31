@@ -231,7 +231,7 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
         return {**c, "related": related, "quiz_progress": progress.data["quiz"].get(cid),
                 "flagged": len(progress.data["flags"].get(cid, [])),
                 "goal": CHECKS[cid][0] if cid in CHECKS else None, "history": [h for h in hist if h["status"] != "na"],
-                "is_focus": user.focus_concept == cid}
+                "is_focus": user.focus_concept == cid, "mastery": progress.mastery(cid)}
 
     @app.post("/api/learn/{cid}/quiz")
     async def learn_quiz(cid: str, body: dict = Body(...)):
@@ -260,6 +260,13 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
                 async with RiotClient(settings.riot_api_key, settings.platform, settings.region) as riot:
                     puuid = user.puuid if (user.riot_id == riot_id and user.puuid) else await resolve_puuid(riot, riot_id)
                     user.update({"riot_id": riot_id, "puuid": puuid}).save(settings.data_dir)
+                    try:
+                        solo = next((e for e in await riot.rank_by_puuid(puuid)
+                                     if e.get("queueType") == "RANKED_SOLO_5x5"), None)
+                        if solo:
+                            progress.record_rank(solo)
+                    except RiotApiError:
+                        pass
                     with personal_store() as st:
                         await sync_personal(riot, st, puuid, int(body.get("count", 10)), say=lambda *_: None)
                         games = list_matches(st, puuid, 30)
@@ -304,7 +311,10 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
             rv = Reviewer(st, stats, champs).review(match_id, user.puuid).to_dict()
         # 리뷰에서 지적된 개념은 '추천 학습'으로 쌓고, 개념 체크는 성장 기록으로 남긴다
         progress.flag({c for l in rv["lessons"] for c in l["concepts"] if c in by_id}, match_id)
-        progress.record_checks(match_id, rv["summary"], rv["checks"])
+        progress.record_checks(match_id, rv["summary"], rv["checks"], rv.get("facts"))
+        for cid in {c for l in rv["lessons"] for c in l["concepts"] if c in by_id}:
+            progress.schedule(f"quiz:{cid}", "quiz", {"concept": cid})
+        attach_compare(rv, match_id)
         for c in rv["checks"]:
             c["title"] = by_id.get(c["concept"], {}).get("title", c["concept"])
             c["focus"] = c["concept"] == user.focus_concept
@@ -312,6 +322,33 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
             l["concepts"] = [{"id": c, "title": by_id[c]["title"]} for c in l["concepts"] if c in by_id]
         rv["key_lesson"] = key_lesson(rv)
         return rv
+
+    METRIC_KEYS = {"3:00까지 먹은 캠프": "camps3", "10분 정글 CS": "cs10", "10분 전 데스": "deaths10",
+                   "분당 시야 점수": "vision_pm", "첫 귀환": "first_recall_s"}
+
+    def fmt_metric(key: str, v: float) -> str:
+        if key == "first_recall_s":
+            return f"{int(v) // 60}:{int(v) % 60:02d}"
+        return f"{v:.2f}" if key == "vision_pm" else f"{v:.1f}" if key in ("deaths10", "camps3") else f"{v:.0f}"
+
+    def attach_compare(rv: dict, match_id: str) -> None:
+        """비교표에 '다음 티어 평균'과 '내 최근 평균'을 붙인다."""
+        base = progress.baseline(exclude=match_id)
+        tgt = {}
+        if stats.available:
+            with stats.session():
+                tgt = stats.bucket_avgs(user.target_bucket)
+        rv["compare"] = {"target_label": {"emerald": "에메랄드", "diamond": "다이아", "platinum": "플래티넘",
+                                          "apex": "마스터+"}.get(user.target_bucket, user.target_bucket),
+                         "target_games": tgt.get("games", 0), "me_games": base.get("games", 0)}
+        for m in rv["metrics"]:
+            k = METRIC_KEYS.get(m["label"])
+            if not k:
+                continue
+            if tgt.get(k) is not None:
+                m["target"] = fmt_metric(k, tgt[k])
+            if base.get(k) is not None:
+                m["me_avg"] = fmt_metric(k, base[k])
 
     def key_lesson(rv: dict) -> dict | None:
         """이 경기에서 하나만 배운다면: 연습 목표 개념의 실패 > 가장 심각한 피드백."""
@@ -355,7 +392,14 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
                                   "status": h["checks"][0]["status"] if h["checks"] else "na",
                                   "value": h["checks"][0]["value"] if h["checks"] else ""}
                                  for h in progress.history(user.focus_concept, 10)]}
+        from ..learn.library import effect_report, rank_label
+
+        for x in skills:
+            x["mastery"] = progress.mastery(x["id"])
         return {"riot_id": user.riot_id, "onboarded": user.onboarded, "pool": len(user.champion_pool),
+                "due": len(progress.due_items(999)),
+                "effect": effect_report(progress, user.focus_concept, user.focus_set_at),
+                "rank": rank_label(progress.data["ranks"][-1]) if progress.data["ranks"] else None,
                 "focus": focus, "skills": sorted(skills, key=lambda x: (x["total"] == 0, x["pass"] / max(x["total"], 1))),
                 "suggest": suggest, "recommended": progress.recommended(library),
                 "games_tracked": len(progress.data["checks"]), "stats_ready": stats.available}
@@ -367,6 +411,10 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
         cid = body.get("concept", "")
         if cid and cid not in CHECKS:
             raise HTTPException(400, "경기 기록으로 체크할 수 있는 개념만 연습 목표로 정할 수 있어요")
+        from datetime import datetime, timezone
+
+        if cid != user.focus_concept:
+            user.update({"focus_set_at": datetime.now(timezone.utc).isoformat(timespec="seconds")})
         user.update({"focus_concept": cid, "onboarded": True}).save(settings.data_dir)
         return {"focus": concept_brief(cid) if cid else None}
 
@@ -401,8 +449,32 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
     @app.post("/api/moments/answer")
     async def moment_answer(body: dict = Body(...)):
         progress.record_decision(body.get("match_id", ""), int(body.get("minute", 0)), body.get("choice", ""),
-                                 bool(body.get("good")), body.get("concepts") or [])
+                                 bool(body.get("good")), body.get("concepts") or [], body.get("moment"))
         return {"ok": True}
+
+    # ---- 오늘의 복습 -------------------------------------------------------
+
+    @app.get("/api/srs/due")
+    async def srs_due():
+        items = []
+        for it in progress.due_items():
+            if it["kind"] == "quiz":
+                c = by_id.get(it["ref"]["concept"])
+                if not c or not c.get("quiz"):
+                    continue
+                q = c["quiz"][hash(it["key"] + it["due"]) % len(c["quiz"])]
+                items.append({"key": it["key"], "kind": "quiz", "concept": {"id": c["id"], "title": c["title"]},
+                              "q": q["q"], "choices": q["choices"], "answer": q["answer"], "explain": q.get("explain", "")})
+            else:
+                items.append({"key": it["key"], "kind": "moment", "moment": it["ref"]})
+        return {"items": items, "total_due": len(progress.due_items(999))}
+
+    @app.post("/api/srs/grade")
+    async def srs_grade(body: dict = Body(...)):
+        it = progress.grade(body.get("key", ""), bool(body.get("correct")))
+        if it and it["kind"] == "quiz":
+            progress.record_quiz(it["ref"]["concept"], bool(body.get("correct")))
+        return it or {}
 
     @app.post("/api/replay/{match_id}")
     async def open_replay(match_id: str, body: dict = Body(default={})):

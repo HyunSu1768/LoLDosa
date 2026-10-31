@@ -15,6 +15,8 @@ class UserSettings:
     my_bucket: str = "platinum"  # 내 티어대 데이터 버킷
     ai_enabled: bool = True
     focus_concept: str = ""  # 지금 연습 중인 개념 (learn.skills.CHECKS 의 id)
+    focus_set_at: str = ""  # 목표를 정한 시각 (효과 리포트 기준점)
+    target_bucket: str = "emerald"  # 비교할 '다음 티어'
     onboarded: bool = False
 
     @classmethod

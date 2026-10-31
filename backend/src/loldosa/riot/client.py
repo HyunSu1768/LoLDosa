@@ -108,6 +108,10 @@ class RiotClient:
         path = f"/lol/league/v4/entries/{queue}/{tier.upper()}/{division}"
         return await self._get(self.platform, "league-entries", path, {"page": page}) or []
 
+    async def rank_by_puuid(self, puuid: str) -> list[dict]:
+        path = f"/lol/league/v4/entries/by-puuid/{puuid}"
+        return await self._get(self.platform, "league-by-puuid", path) or []
+
     # ---- account (리전 라우팅: asia) ----------------------------------------
 
     async def account_by_riot_id(self, game_name: str, tag_line: str) -> dict | None:

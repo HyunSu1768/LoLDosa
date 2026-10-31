@@ -136,7 +136,8 @@ async function loadHome() {
   const skills = h.skills.map((s) => {
     const rate = s.total ? s.pass / s.total : null;
     return `<div class="skill" onclick="openConcept('${s.id}')">
-      <div class="skill-top"><b>${esc(s.title)}</b>${f && s.id === f.id ? '<span class="pill on">연습 중</span>' : ""}</div>
+      <div class="skill-top"><b>${esc(s.title)}</b>${f && s.id === f.id ? '<span class="pill on">연습 중</span>' : ""}
+        ${s.mastery && s.mastery.score != null ? `<span class="mastery ${s.mastery.score >= 75 ? "good" : s.mastery.score >= 45 ? "mid" : "bad"}" title="숙련도: 경기 체크·판단 훈련·퀴즈를 합친 점수">${s.mastery.score}</span>` : ""}</div>
       <div class="bar"><i style="width:${rate == null ? 0 : Math.max(4, Math.round(rate * 100))}%" class="${rate == null ? "" : rate >= 0.7 ? "good" : rate >= 0.4 ? "mid" : "bad"}"></i></div>
       <div class="muted">${rate == null ? "아직 기록 없음" : `최근 ${s.total}판 중 ${s.pass}번 지킴${s.total < 5 ? " · 판 수가 적어 참고만" : ""}`}</div></div>`;
   }).join("");
@@ -145,9 +146,20 @@ async function loadHome() {
   if (!h.riot_id) todo.push(`<a href="#" onclick="showTab('settings');return false">설정</a>에서 Riot ID를 입력하세요.`);
   if (h.riot_id && !h.games_tracked) todo.push(`<a href="#" onclick="showTab('review');return false">경기 복기</a>에서 최근 경기를 불러오면 개념별 달성률이 채워져요.`);
   if (h.suggest && (!f || h.suggest.id !== f.id)) todo.push(`가장 약한 부분은 <b>${esc(h.suggest.title)}</b>이에요 (최근 ${h.suggest.total}판 중 ${h.suggest.pass}번 지킴). <a href="#" onclick="setFocus('${h.suggest.id}');return false">이걸 목표로 하기</a>`);
+  const due = h.due ? `<div class="panel due"><div><b>오늘의 복습 ${h.due}개</b><div class="muted">틀렸던 판단 장면과 약한 개념을 잊을 때쯤 다시 풀어요 (1·2·4·8·16일 간격)</div></div>
+      <button class="primary" onclick="startReview()">복습 시작</button></div>` : "";
+  const ef = h.effect;
+  const pct0 = (a, b) => (b ? `${Math.round((a / b) * 100)}%` : "-");
+  const effect = ef ? `<div class="panel"><h3 class="sec">효과 리포트 <span class="muted">목표를 정한 ${esc(ef.since.slice(0, 10))} 전후</span></h3>
+      <table class="metrics"><tr><th></th><th>정하기 전 (최근 ${ef.before.games}판)</th><th>정한 뒤 (${ef.after.games}판)</th></tr>
+      <tr><td>목표 지킨 비율</td><td>${pct0(ef.before.focus_pass, ef.before.focus_total)}</td><td>${pct0(ef.after.focus_pass, ef.after.focus_total)}</td></tr>
+      <tr><td>승률</td><td>${pct0(ef.before.wins, ef.before.games)}</td><td>${pct0(ef.after.wins, ef.after.games)}</td></tr>
+      <tr><td>랭크</td><td>${esc(ef.rank_start)}</td><td>${esc(ef.rank_now)}${ef.rank_delta != null ? ` (${ef.rank_delta >= 0 ? "+" : ""}${ef.rank_delta}점)` : ""}</td></tr></table>
+      <p class="muted">${ef.after.games < 5 ? "목표를 정한 뒤 판 수가 적어서 아직은 참고만 하세요." : "판 수가 쌓일수록 믿을 만해져요. 랭크 점수는 디비전 100점·티어 400점 기준이에요."}</p></div>` : "";
   $("home").innerHTML = `
+    ${h.rank ? `<div class="rank-line">현재 랭크 <b>${esc(h.rank)}</b></div>` : ""}
     <div class="home-grid">
-      <div>${focusCard}
+      <div>${due}${focusCard}${effect}
         ${todo.length ? `<div class="panel"><h3 class="sec">다음에 할 일</h3><ul class="todo">${todo.map((t) => `<li>${t}</li>`).join("")}</ul></div>` : ""}
         <div class="panel loop"><h3 class="sec">LoLDosa 쓰는 법</h3>
           <ol><li><b>연습 목표 하나</b>를 정해요 (홈)</li><li>챔피언 선택 때 <b>게임 전 브리핑</b>에서 목표와 이번 판 플랜을 읽어요</li>
@@ -401,7 +413,8 @@ async function openReview(id) {
     const others = rv.lessons.filter((l) => !kl || l.title !== kl.lesson.title).slice(0, 4).map((l) => `<div class="lesson sev${Math.min(l.severity, 3)}"><h4>${esc(l.title)}</h4>
         <p>${linkify(l.text)}${evChips(l.evidence, pool)}</p>${whyBlock(l.concepts)}</div>`).join("");
     const strengths = rv.strengths.map((l) => `<span class="strength">✓ ${esc(l.title)}</span>`).join("");
-    const metrics = rv.metrics.map((m) => `<tr><td>${linkify(m.label)}</td><td class="${m.verdict}">${esc(m.mine)}</td><td>${esc(m.bench)}</td><td>${evChips(m.evidence, pool)}</td></tr>`).join("");
+    const metrics = rv.metrics.map((m) => `<tr><td>${linkify(m.label)}</td><td class="${m.verdict}">${esc(m.mine)}</td><td>${esc(m.me_avg || "-")}</td><td>${esc(m.target || "-")}</td><td>${esc(m.bench)}</td><td>${evChips(m.evidence, pool)}</td></tr>`).join("");
+    const cmp = rv.compare || {};
     const moments = rv.moments.map((m) => `<li class="${m.good === true ? "good" : m.good === false ? "bad" : ""} ${m.kind}">${linkify(m.text)}</li>`).join("");
     box.innerHTML = `
       <div class="rv-head">${imgTag(sm.key)}<div>
@@ -417,7 +430,7 @@ async function openReview(id) {
       <div id="rv-ai"><button class="ghost" id="rv-ai-btn">🤖 AI 복기 코칭 받기</button></div>
       <details class="more"><summary>경기 흐름 보기 <span class="muted">(10분 동선 · 주요 순간 · 고티어 비교표)</span></summary>
         <div class="rv-grid"><div>${minimap(rv)}</div><div><ul class="moments">${moments}</ul></div></div>
-        ${metrics ? `<table class="metrics"><tr><th>항목</th><th>나</th><th>고티어 (${esc(rv.scope_label)})</th><th></th></tr>${metrics}</table>` : ""}
+        ${metrics ? `<table class="metrics"><tr><th>항목</th><th>이번 판</th><th>내 최근 평균${cmp.me_games ? ` (${cmp.me_games}판)` : ""}</th><th>다음 티어 ${esc(cmp.target_label || "")}</th><th>고티어 (${esc(rv.scope_label)})</th><th></th></tr>${metrics}</table>` : ""}
       </details>`;
     loadMoments(id);
     $("rv-ai-btn").onclick = async () => {
@@ -489,7 +502,7 @@ function revealMoment(matchId, mo, card, choice) {
     <button class="ghost small" onclick="openReplay('${matchId}', ${mo.t})">🎬 리플레이로 이 장면 보기</button>
     <p class="muted">결과는 '그 행동을 한 판들'의 평균이라 상황이 조금씩 달라요. 같은 행동도 실행에 따라 결과가 달라질 수 있어요.</p>`;
   api("/api/moments/answer", { method: "POST", body: JSON.stringify({ match_id: matchId, minute: mo.minute, choice, good,
-    concepts: mo.concepts.map((c) => c.id) }) }).catch(() => {});
+    concepts: mo.concepts.map((c) => c.id), moment: compactMoment(mo) }) }).catch(() => {});
 }
 
 function conceptChipsFor(list) {
@@ -505,6 +518,63 @@ async function openReplay(matchId, t) {
   } catch (e) { openModal(`<h2>리플레이를 열지 못했어요</h2><p>${esc(e.message)}</p>`); }
 }
 window.openReplay = openReplay;
+
+function compactMoment(mo) {
+  return { match_id: currentMatch, minute: mo.minute, t: mo.t, reason: mo.reason, snapshot: mo.snapshot, choices: mo.choices,
+    crowd: mo.crowd.slice(0, 6), good: mo.good, verdict: mo.verdict, mine: mo.mine, k: mo.k, pool_label: mo.pool_label, concepts: mo.concepts };
+}
+
+/* ---------- 오늘의 복습 ---------- */
+let reviewQueue = [];
+async function startReview() {
+  await ensureLearn().catch(() => {});
+  const r = await api("/api/srs/due");
+  reviewQueue = r.items;
+  nextReview(0, 0);
+}
+window.startReview = startReview;
+
+function nextReview(i, right) {
+  if (i >= reviewQueue.length) {
+    openModal(`<h2>오늘 복습 끝!</h2><p>${reviewQueue.length}개 중 ${right}개를 맞혔어요. 틀린 건 내일 다시, 맞힌 건 간격을 늘려서 다시 나와요.</p>
+      <button class="primary" onclick="closeModal();loadHome()">홈으로</button>`);
+    return;
+  }
+  const it = reviewQueue[i];
+  const head = `<div class="muted">복습 ${i + 1} / ${reviewQueue.length}</div>`;
+  const finish = async (correct, html) => {
+    await api("/api/srs/grade", { method: "POST", body: JSON.stringify({ key: it.key, correct }) });
+    $("rv-after").innerHTML = html + `<button class="primary" id="rv-next">다음</button>`;
+    $("rv-next").onclick = () => nextReview(i + 1, right + (correct ? 1 : 0));
+  };
+  if (it.kind === "quiz") {
+    openModal(`${head}<h2>${esc(it.concept.title)}</h2><div class="quiz"><div class="q">${esc(it.q)}</div>
+      ${it.choices.map((c, ci) => `<button class="choice" data-c="${ci}">${esc(c)}</button>`).join("")}</div><div id="rv-after"></div>`);
+    document.querySelectorAll(".modal .choice").forEach((b) => (b.onclick = () => {
+      const ok = +b.dataset.c === it.answer;
+      b.classList.add(ok ? "right" : "wrong");
+      document.querySelector(`.modal .choice[data-c="${it.answer}"]`).classList.add("right");
+      document.querySelectorAll(".modal .choice").forEach((x) => (x.onclick = null));
+      finish(ok, `<p>${esc(it.explain)}</p>`);
+    }));
+  } else {
+    const mo = it.moment;
+    openModal(`${head}<h2>${mo.minute}:00 · ${esc(mo.reason)}</h2><div class="mo-body small">${snapshotMap(mo.snapshot, 240)}
+      <div><ul class="mo-facts">${mo.snapshot.facts.map((f) => `<li>${linkify(f)}</li>`).join("")}</ul>
+      <div class="mo-q">여기서 뭐 할래요?</div><div class="mo-choices">${mo.choices.map((c) => `<button class="choice" data-a="${c.action}">${esc(c.label)}</button>`).join("")}</div></div></div>
+      <div id="rv-after"></div>`);
+    document.querySelectorAll(".modal .mo-choices .choice").forEach((b) => (b.onclick = () => {
+      const ok = mo.good.includes(b.dataset.a);
+      document.querySelectorAll(".modal .mo-choices .choice").forEach((x) => {
+        if (mo.good.includes(x.dataset.a)) x.classList.add("right");
+        x.onclick = null;
+      });
+      if (!ok) b.classList.add("wrong");
+      const bars = mo.crowd.map((c) => `<div class="crowd-row"><span class="cl">${esc(c.label)}</span><span class="cbar"><i style="width:${Math.round(c.share * 100)}%"></i></span><span class="cs">${Math.round(c.share * 100)}%</span></div>`).join("");
+      finish(ok, `<div class="mo-verdict ${ok ? "good" : "bad"}">${ok ? "좋아요" : "다시 보기"} — ${esc(mo.verdict)}</div><div class="crowd">${bars}</div>`);
+    }));
+  }
+}
 
 async function setFocusFromReview(id) {
   await api("/api/focus", { method: "PUT", body: JSON.stringify({ concept: id }) });
@@ -554,8 +624,12 @@ async function openConcept(id) {
       ${q.choices.map((ch, ci) => `<button class="choice" data-c="${ci}">${esc(ch)}</button>`).join("")}
       <div class="explain hidden">${esc(q.explain || "")}</div></div>`).join("");
   const hist = (c.history || []).length ? `<div class="trend"><span class="muted">내 최근 경기</span><div>${dotsHtml(c.history)}</div></div>` : "";
-  const goalBox = c.goal ? `<div class="goal-box"><div>🎯 <b>경기에서 이렇게 체크해요</b>: ${esc(c.goal)}</div>${hist}
-      ${c.is_focus ? '<span class="pill on">지금 연습 중</span>' : `<button class="primary" onclick="setFocus('${c.id}').then(() => openConcept('${c.id}'))">이걸 연습 목표로</button>`}</div>` : "";
+  const mastery = c.mastery && c.mastery.score != null ? `<div class="mastery-line">숙련도 <b>${c.mastery.score}</b> · ${esc(c.mastery.level)} <span class="muted">(경기 체크·판단 훈련·퀴즈 ${c.mastery.n}회 기준)</span></div>` : "";
+  const focusBtn = c.is_focus ? '<span class="pill on">지금 연습 중</span>'
+    : `<button class="primary" onclick="setFocus('${c.id}').then(() => openConcept('${c.id}'))">이걸 연습 목표로</button>`;
+  const goalBox = c.goal
+    ? `<div class="goal-box"><div>🎯 <b>경기에서 이렇게 체크해요</b>: ${esc(c.goal)}</div>${hist}${mastery}${focusBtn}</div>`
+    : mastery;
   const cat = (learnIndex.categories.find((x) => x.id === c.category) || {}).name || "";
   $("learn-detail").innerHTML = `
     <div class="crumb">${esc(cat)} · ${esc(LEVEL_KO[c.level] || "")}${c.flagged ? ` · 내 복기에서 ${c.flagged}판 지적됨` : ""}</div>
@@ -596,6 +670,7 @@ async function loadSettings() {
   const s = await api("/api/settings");
   $("set-riot-id").value = s.riot_id || "";
   $("set-bucket").value = s.my_bucket || "platinum";
+  $("set-target").value = s.target_bucket || "emerald";
   $("set-ai").checked = !!s.ai_enabled;
   pool = new Set(s.champion_pool || []);
   renderChampGrid();
@@ -615,7 +690,7 @@ function renderChampGrid() {
 $("champ-search").oninput = renderChampGrid;
 $("save-settings").onclick = async () => {
   try {
-    await api("/api/settings", { method: "PUT", body: JSON.stringify({ riot_id: $("set-riot-id").value.trim(), my_bucket: $("set-bucket").value, ai_enabled: $("set-ai").checked, champion_pool: [...pool] }) });
+    await api("/api/settings", { method: "PUT", body: JSON.stringify({ riot_id: $("set-riot-id").value.trim(), my_bucket: $("set-bucket").value, target_bucket: $("set-target").value, ai_enabled: $("set-ai").checked, champion_pool: [...pool] }) });
     $("settings-status").textContent = "저장했어요. 다음 챔피언 선택부터 적용돼요.";
     $("riot-id").value = $("set-riot-id").value.trim();
   } catch (e) { $("settings-status").textContent = e.message; }
