@@ -231,3 +231,21 @@ class StatsDB:
     def objective_impact(self, s: Scope) -> dict[str, dict]:
         w, p = self._w(s)
         return {r["objective"]: r for r in self.rows(f"SELECT * FROM objective_impact WHERE {w}", p)}
+
+    # ---- 프로 대회 (Leaguepedia) ----------------------------------------------
+
+    def _has(self, table: str) -> bool:
+        return bool(self.rows("SELECT 1 FROM information_schema.tables WHERE table_name = ?", [table]))
+
+    def pro_info(self) -> dict | None:
+        return self.one("SELECT * FROM pro_info") if self._has("pro_info") else None
+
+    def pro_champ(self, champ: int) -> dict | None:
+        if not self._has("pro_champ"):
+            return None
+        return self.one("SELECT * FROM pro_champ WHERE champion_id=?", [champ])
+
+    def pro_matchup(self, champ: int, enemy: int) -> dict | None:
+        if not self._has("pro_matchups"):
+            return None
+        return self.one("SELECT * FROM pro_matchups WHERE champion_id=? AND enemy_id=?", [champ, enemy])

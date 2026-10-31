@@ -116,3 +116,20 @@ def test_josa():
     assert josa("리 신") == "리 신은"
     assert josa("아리") == "아리는"
     assert josa("잭스", "이가") == "잭스가"
+
+
+def test_insights_card_uses_guides(built):
+    from loldosa.sources.guides import GuideKB, SourceDoc
+
+    d, champs, _ = built
+    kb = GuideKB(d)
+    src = SourceDoc("text", "https://example.com/g", "가이드", "저자", "ko", "리 신은 레드에서 시작합니다")
+    kb.save(src, [{"champion_id": 64, "vs_champion_id": 0, "topic": "route", "text": "레드 시작",
+                   "quote": "리 신은 레드에서 시작합니다", "start_s": None, "url": src.url}])
+    engine = BriefingEngine(StatsDB(d / "stats.duckdb"), champs, kb.path)
+    b = engine.build(parse_session(sequence()[-2]))
+    card = next(c for c in b.cards if c.id == "insights")
+    guide_items = [i for i in card.items if i.kind == "guide"]
+    assert guide_items and "레드 시작" in guide_items[0].text
+    ev = {e.id: e for e in b.evidence}
+    assert ev[guide_items[0].evidence[0]].url == "https://example.com/g"

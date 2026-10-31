@@ -164,6 +164,9 @@ def cmd_update(args) -> int:
     rc = cmd_ddragon_sync(argparse.Namespace(version=None))
     if rc == 0:
         rc = cmd_collect(args)
+    if rc == 0 and not args.skip_pro:
+        if cmd_pro_sync(argparse.Namespace(days=90)) != 0:
+            _print("(프로 데이터는 건너뜀: 다음 update 때 다시 시도)")
     if rc == 0:
         rc = cmd_analyze(args)
     return rc
@@ -174,6 +177,135 @@ def cmd_app(args) -> int:
 
     run(replay=Path(args.replay) if args.replay else None, port=args.port, browser=args.browser,
         ai=not args.no_ai, replay_interval=args.interval)
+    return 0
+
+
+# ---- pro / guides ----------------------------------------------------------
+
+def cmd_pro_sync(args) -> int:
+    from .sources.pro import sync_pro
+
+    s = load_settings()
+    champs = load_cached(s.data_dir, s.locale)
+    if champs is None:
+        _print("먼저 `loldosa ddragon sync`.")
+        return 1
+    try:
+        n = asyncio.run(sync_pro(s.data_dir, champs.version, days=args.days, say=_print))
+    except RuntimeError as e:
+        _print(f"[!!] {e}")
+        return 1
+    _print(f"프로 정글 기록 {n}건 저장 → `loldosa analyze` 로 통계에 반영")
+    return 0
+
+
+def _name_resolver():
+    import re as _re
+
+    s = load_settings()
+    champs = load_cached(s.data_dir, s.locale)
+    en = {}
+    try:
+        from .sources.pro import english_names
+        en = asyncio.run(english_names(champs.version)) if champs else {}
+    except Exception:  # 오프라인이면 한국어/키 매칭만
+        pass
+
+    def resolve(name):
+        if not name:
+            return 0
+        key = _re.sub(r"[^a-z0-9]", "", str(name).lower())
+        if key in en:
+            return en[key]
+        c = champs.by_name(str(name)) if champs else None
+        return c.id if c else 0
+    return resolve
+
+
+async def _guides_ingest(docs_loader, args) -> int:
+    from .coach.claude import ClaudeCoach
+    from .sources.guides import GuideKB, extract
+
+    s = load_settings()
+    kb = GuideKB(s.data_dir)
+    coach = ClaudeCoach(timeout=300)
+    if not coach.enabled:
+        _print("Claude Code CLI 가 필요합니다 (설치 후 `claude` 로그인).")
+        return 1
+    resolve = _name_resolver()
+    total = 0
+    async for doc in docs_loader():
+        if doc is None:
+            continue
+        _print(f"• {doc.title} ({doc.author}) — {len(doc.text)}자")
+        claims, dropped = await extract(doc, coach, resolve, say=_print)
+        kb.save(doc, claims)
+        total += len(claims)
+        _print(f"  저장 {len(claims)}개 (원문에서 인용을 찾지 못해 버린 항목 {dropped}개)")
+    _print(f"완료: 주장 {total}개")
+    return 0
+
+
+def cmd_guides_add(args) -> int:
+    from .sources.guides import load_youtube
+
+    async def loader():
+        for url in args.urls:
+            try:
+                yield await load_youtube(url)
+            except Exception as e:  # noqa: BLE001
+                _print(f"[!!] {url}: 자막을 가져오지 못했습니다 ({type(e).__name__})")
+                yield None
+    return asyncio.run(_guides_ingest(loader, args))
+
+
+def cmd_guides_search(args) -> int:
+    from .sources.guides import GuideKB, load_youtube, search_youtube
+
+    async def loader():
+        kb = GuideKB(load_settings().data_dir)
+        for q in args.query:
+            ids = await search_youtube(q, args.max)
+            _print(f"검색 '{q}': {len(ids)}개")
+            for vid in ids:
+                url = f"https://www.youtube.com/watch?v={vid}"
+                if kb.has_source(url):
+                    continue
+                try:
+                    yield await load_youtube(url)
+                except Exception as e:  # noqa: BLE001
+                    _print(f"  [--] {url}: 자막 없음/차단 ({type(e).__name__})")
+    return asyncio.run(_guides_ingest(loader, args))
+
+
+def cmd_guides_text(args) -> int:
+    from .sources.guides import load_text
+
+    async def loader():
+        yield load_text(Path(args.file), args.url, args.title, args.author or "")
+    return asyncio.run(_guides_ingest(loader, args))
+
+
+def cmd_guides_list(args) -> int:
+    from .sources.guides import GuideKB
+
+    s = load_settings()
+    kb = GuideKB(s.data_dir)
+    if not kb.path.exists():
+        _print("가이드 지식 베이스가 비어 있습니다.")
+        return 0
+    champs = load_cached(s.data_dir, s.locale)
+    con = kb.connect(read_only=True)
+    try:
+        for title, author, url, n in con.execute("""
+            SELECT s.title, s.author, s.url, count(c.claim_id) FROM guide_sources s
+            LEFT JOIN guide_claims c USING (source_id) GROUP BY ALL ORDER BY 1""").fetchall():
+            _print(f"- {title} ({author}) 주장 {n}개  {url}")
+        if args.verbose:
+            for cid, topic, text in con.execute("SELECT champion_id, topic, text FROM guide_claims").fetchall():
+                _print(f"    [{champs.name(cid) if champs and cid else '공통'}/{topic}] {text}")
+    finally:
+        con.close()
     return 0
 
 
@@ -328,6 +460,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("analyze", help="수집 데이터 → 통계 DB").set_defaults(func=cmd_analyze)
     up = sub.add_parser("update", help="챔피언 데이터 갱신 + 수집 + 분석 한 번에")
     collect_args(up)
+    up.add_argument("--skip-pro", action="store_true", help="프로 대회 데이터 수집 건너뛰기")
     up.set_defaults(func=cmd_update)
 
     app = sub.add_parser("app", help="브리핑 앱 실행")
@@ -337,6 +470,28 @@ def build_parser() -> argparse.ArgumentParser:
     app.add_argument("--port", type=int, default=8765)
     app.add_argument("--no-ai", action="store_true", help="Claude 코칭 끄기")
     app.set_defaults(func=cmd_app)
+
+    pro = sub.add_parser("pro", help="프로 대회 데이터 (Leaguepedia)").add_subparsers(dest="sub", required=True)
+    ps = pro.add_parser("sync", help="프로 정글 기록 수집")
+    ps.add_argument("--days", type=int, default=90)
+    ps.set_defaults(func=cmd_pro_sync)
+
+    gd = sub.add_parser("guides", help="전문가 가이드 지식 베이스").add_subparsers(dest="sub", required=True)
+    ga = gd.add_parser("add", help="유튜브 영상 자막에서 조언 추출")
+    ga.add_argument("urls", nargs="+")
+    ga.set_defaults(func=cmd_guides_add)
+    gs = gd.add_parser("search", help="유튜브 검색 → 자막 → 추출 (예: '리신 정글 강의')")
+    gs.add_argument("query", nargs="+")
+    gs.add_argument("--max", type=int, default=3, help="검색어당 영상 수")
+    gs.set_defaults(func=cmd_guides_search)
+    gt = gd.add_parser("add-text", help="가이드 글(텍스트 파일)에서 조언 추출")
+    gt.add_argument("file")
+    gt.add_argument("--url", required=True, help="원문 주소 (출처 표시용)")
+    gt.add_argument("--title", required=True)
+    gt.add_argument("--author")
+    gt.set_defaults(func=cmd_guides_text)
+    gl = gd.add_parser("list", help="저장된 가이드 보기")
+    gl.set_defaults(func=cmd_guides_list)
 
     col = sub.add_parser("collect", help="경기·타임라인 수집 (재개 가능)")
     collect_args(col)

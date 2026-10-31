@@ -5,7 +5,7 @@ const STAGE_KO = {
 const $ = (id) => document.getElementById(id);
 let ddragon = "";
 let evidence = {};
-const openCards = new Set(["route", "ganks", "matchup", "objectives", "comp"]);
+const openCards = new Set(["route", "ganks", "matchup", "objectives", "comp", "insights"]);
 
 const icon = (key) => key && ddragon ? `https://ddragon.leagueoflegends.com/cdn/${ddragon}/img/champion/${key}.png` : "";
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -16,7 +16,9 @@ function evChips(ids) {
     if (!e) return "";
     const tip = `${e.text}\n— ${e.source}${e.confidence ? ` · 신뢰도 ${e.confidence}` : ""}`;
     const cls = e.confidence === "낮음" ? "low" : e.confidence === "높음" ? "high" : "";
-    return `<span class="ev ${cls}" data-tip="${esc(tip)}">${id}${e.games != null ? ` n=${e.games}` : ""}</span>`;
+    const chip = `${id}${e.games != null ? ` n=${e.games}` : ""}${e.url ? " ↗" : ""}`;
+    if (e.url) return `<a class="ev ${cls}" href="${esc(e.url)}" target="_blank" rel="noopener" data-tip="${esc(tip)}">${chip}</a>`;
+    return `<span class="ev ${cls}" data-tip="${esc(tip)}">${chip}</span>`;
   }).join("");
 }
 

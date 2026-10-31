@@ -51,6 +51,8 @@ aside li .hover { opacity: .55; font-style: italic; }
 .card.open .card-items { display: block; }
 .card-items li { padding: 4px 0; color: #c9d4df; }
 .card-items li.inference::before { content: "판단 "; color: var(--infer); font-size: 11px; font-weight: 700; }
+.card-items li.guide::before { content: "가이드 "; color: var(--gold); font-size: 11px; font-weight: 700; }
+a.ev { text-decoration: none; color: var(--gold); }
 .ev { display: inline-block; margin-left: 4px; font-size: 10px; padding: 0 5px; border-radius: 4px; background: var(--panel2); color: var(--muted); border: 1px solid var(--line); cursor: help; position: relative; }
 .ev:hover::after { content: attr(data-tip); position: absolute; left: 0; top: 18px; width: 360px; white-space: normal; background: #0d131b; color: var(--text); border: 1px solid var(--line); padding: 8px 10px; border-radius: 6px; z-index: 5; font-size: 12px; line-height: 1.45; }
 .ev.low { border-color: #6b4b4b; } .ev.high { border-color: #2f6b55; }

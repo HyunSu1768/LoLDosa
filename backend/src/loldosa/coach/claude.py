@@ -67,20 +67,20 @@ class ClaudeCoach:
     def describe(self) -> dict:
         return {"enabled": self.enabled, "cli": self.cli, "model": self.model}
 
-    def command(self) -> list[str]:
+    def command(self, system: str = SYSTEM) -> list[str]:
         return [
             self.cli, "-p",
             "--output-format", "json",
             "--model", self.model,
-            "--system-prompt", SYSTEM,
+            "--system-prompt", system,
             "--tools", "",
             "--strict-mcp-config",
             "--no-session-persistence",
         ]
 
-    async def run_cli(self, prompt: str) -> str:
+    async def run_cli(self, prompt: str, system: str = SYSTEM) -> str:
         proc = await asyncio.create_subprocess_exec(
-            *self.command(),
+            *self.command(system),
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         )
         try:

@@ -297,6 +297,21 @@ SELECT sc.scope, sc.bucket, p.champion_id,
 FROM src.participants p JOIN src.matches m USING (match_id) JOIN sc USING (match_id) GROUP BY ALL""",
 }
 
+PRO_OUTPUTS = {
+    "pro_champ": """
+SELECT champion_id, count(*) AS games, sum(win::INT) AS wins, count(DISTINCT player) AS players,
+    avg(minutes) AS minutes, avg(own_grubs) AS grubs, avg(own_dragons) AS dragons, avg(own_heralds) AS heralds,
+    string_agg(DISTINCT regexp_extract(overview, '^([^/]+)', 1), ', ') AS leagues
+FROM pro.pro_jungle WHERE champion_id > 0 GROUP BY ALL""",
+    "pro_matchups": """
+SELECT a.champion_id, b.champion_id AS enemy_id, count(*) AS games, sum(a.win::INT) AS wins
+FROM pro.pro_jungle a JOIN pro.pro_jungle b ON a.game_id = b.game_id AND a.team <> b.team
+WHERE a.champion_id > 0 AND b.champion_id > 0 GROUP BY ALL""",
+    "pro_info": """
+SELECT count(DISTINCT game_id) AS games, min(played_at) AS since, max(played_at) AS until
+FROM pro.pro_jungle""",
+}
+
 # 아군 4명 평균 AP 성향 기준. Data Dragon 수치 분포를 보고 정한 값
 AD_CUT, AP_CUT = 0.42, 0.58
 
@@ -326,6 +341,14 @@ def build_stats(data_dir: Path, champs: ChampionIndex) -> dict[str, int]:
         for name, sql in OUTPUTS.items():
             con.execute(f"CREATE TABLE {name} AS " + sql.format(ad_cut=AD_CUT, ap_cut=AP_CUT)).fetchall()
             counts[name] = con.execute(f"SELECT count(*) FROM {name}").fetchall()[0][0]
+
+        pro = data_dir / "pro.duckdb"
+        if pro.exists():
+            con.execute(f"ATTACH '{pro}' AS pro (READ_ONLY)").fetchall()
+            for name, sql in PRO_OUTPUTS.items():
+                con.execute(f"CREATE TABLE {name} AS {sql}").fetchall()
+                counts[name] = con.execute(f"SELECT count(*) FROM {name}").fetchall()[0][0]
+            con.execute("DETACH pro").fetchall()
 
         latest = con.execute(
             "SELECT patch FROM src.matches GROUP BY patch ORDER BY max(game_start) DESC LIMIT 1").fetchall()

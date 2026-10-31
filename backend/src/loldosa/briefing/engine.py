@@ -13,6 +13,7 @@ from ..analysis.geometry import CAMP_KO, map_side, team_camps
 from ..analysis.query import Scope, StatsDB, confidence, logit, shrink, sigmoid
 from ..ddragon import ChampionIndex
 from ..lcu.champselect import ChampSelectState, Stage
+from ..sources.guides import TOPIC_KO
 from .models import Briefing, Card, EvidenceLog, Item, Recommendation
 
 SRC_TIMELINE = "Riot Match-V5 타임라인"
@@ -51,9 +52,10 @@ def signed(x: float | None, unit: str = "") -> str:
 
 
 class BriefingEngine:
-    def __init__(self, stats: StatsDB, champs: ChampionIndex) -> None:
+    def __init__(self, stats: StatsDB, champs: ChampionIndex, guides_path=None) -> None:
         self.stats = stats
         self.champs = champs
+        self.guides_path = guides_path
 
     def name(self, cid: int) -> str:
         return self.champs.name(cid)
@@ -102,6 +104,7 @@ class BriefingEngine:
                 self.card_matchup(s, my_champ, enemy_jg),
                 self.card_objectives(s, state, my_champ, roles),
                 self.card_comp(s, state, my_champ, roles),
+                self.card_insights(my_champ, enemy_jg),
             ]
             b.cards = [c for c in b.cards if c and c.items]
         b.evidence = self.ev.items
@@ -202,6 +205,13 @@ class BriefingEngine:
                 eid = self.e(f"{text} (n={games})", games)
                 label = "" if d == 0 else (" ▲" if d > 0.02 else " ▼" if d < -0.02 else " ·")
                 rec.reasons.append(Item(text + label, "fact", [eid]))
+            pro = self.stats.pro_champ(cid)
+            if pro:
+                eid = self.ev.add(f"프로 대회 {self.name(cid)} 정글 {pro['games']}경기, 승률 "
+                                  f"{pct(pro['wins'] / pro['games'])}, 선수 {pro['players']}명 ({pro['leagues']})",
+                                  SRC_PRO, pro["games"], confidence(pro["games"]))
+                rec.reasons.append(Item(f"프로 대회 {pro['games']}경기 승률 {pct(pro['wins'] / pro['games'])} (참고, 점수 미반영)",
+                                        "fact", [eid]))
             out.append(rec)
         return out
 
@@ -501,6 +511,62 @@ class BriefingEngine:
         if not card.headline:
             card.headline = "조합 확정 후 갱신"
         return card
+
+    def card_insights(self, champ: int, enemy_jg: int) -> Card:
+        card = Card("insights", "프로·전문가 인사이트", "")
+        info = self.stats.pro_info()
+        pro = self.stats.pro_champ(champ)
+        period = ""
+        if info and info.get("since"):
+            period = f"{str(info['since'])[:10]}~{str(info['until'])[:10]}"
+        if pro:
+            eid = self.ev.add(
+                f"프로 대회({period}) {self.name(champ)} 정글 {pro['games']}경기, 승률 {pct(pro['wins'] / pro['games'])}, "
+                f"평균 경기 {pro['minutes']:.1f}분, 팀 유충 {pro['grubs']:.1f} / 드래곤 {pro['dragons']:.1f} / 전령 "
+                f"{pro['heralds']:.1f}, 선수 {pro['players']}명, 리그: {pro['leagues']}", SRC_PRO, pro["games"],
+                confidence(pro["games"]))
+            card.add(f"프로 대회 {pro['games']}경기 승률 {pct(pro['wins'] / pro['games'])}, 팀 평균 유충 {pro['grubs']:.1f} · "
+                     f"드래곤 {pro['dragons']:.1f}", eid)
+            card.headline = f"프로 대회 {pro['games']}경기 · 승률 {pct(pro['wins'] / pro['games'])}"
+        elif info:
+            card.add(f"최근 프로 대회({period})에서 {self.name(champ)} 정글 기록이 없습니다.",
+                     self.ev.add(f"프로 대회 정글 기록 {info['games']}경기 중 {self.name(champ)} 없음", SRC_PRO))
+        if enemy_jg:
+            pm = self.stats.pro_matchup(champ, enemy_jg)
+            if pm:
+                eid = self.ev.add(f"프로 대회 {self.name(champ)} vs {self.name(enemy_jg)} 정글 {pm['games']}경기, "
+                                  f"승률 {pct(pm['wins'] / pm['games'])}", SRC_PRO, pm["games"], confidence(pm["games"]))
+                card.add(f"프로 대회 vs {self.name(enemy_jg)}: {pm['games']}경기 {pct(pm['wins'] / pm['games'])}", eid)
+        for g in self.guides(champ, enemy_jg):
+            eid = self.ev.add(f"“{g['quote']}” — {g['title']}{' · ' + g['author'] if g['author'] else ''}",
+                              f"가이드: {g['title']}", url=g["url"])
+            topic = TOPIC_KO.get(g["topic"], g["topic"])
+            card.add(f"[{topic}] {g['text']}", eid, kind="guide")
+        if not card.headline:
+            n = sum(1 for i in card.items if i.kind == "guide")
+            card.headline = f"전문가 가이드 {n}개" if n else "프로·가이드 데이터 없음 (loldosa pro sync / guides add)"
+        return card
+
+    def guides(self, champ: int, enemy_jg: int, limit: int = 6) -> list[dict]:
+        if not self.guides_path or not self.guides_path.exists():
+            return []
+        import duckdb
+
+        con = duckdb.connect(str(self.guides_path), read_only=True)
+        try:
+            cur = con.execute("""
+                SELECT c.topic, c.text, c.quote, c.url, s.title, s.author,
+                       (c.vs_champion_id = ? AND c.vs_champion_id > 0)::INT AS vs_hit
+                FROM guide_claims c JOIN guide_sources s USING (source_id)
+                WHERE c.champion_id = ? OR (c.vs_champion_id = ? AND c.vs_champion_id > 0)
+                ORDER BY vs_hit DESC, c.extracted_at DESC LIMIT ?""", [enemy_jg, champ, enemy_jg, limit])
+            cols = [d[0] for d in cur.description]
+            return [dict(zip(cols, r)) for r in cur.fetchall()]
+        finally:
+            con.close()
+
+
+SRC_PRO = "Leaguepedia 프로 대회 기록"
 
 
 PROFILE_KO = {"ad_heavy": "AD 위주", "ap_heavy": "AP 위주", "balanced": "AD/AP 균형", "unknown": "알 수 없음"}

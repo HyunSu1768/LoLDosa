@@ -68,7 +68,7 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
     settings = load_settings()
     champs = load_cached(settings.data_dir, settings.locale) or ChampionIndex("", {})
     stats = StatsDB(settings.data_dir / "stats.duckdb")
-    engine = BriefingEngine(stats, champs)
+    engine = BriefingEngine(stats, champs, settings.data_dir / "guides.duckdb")
     hub = Hub()
 
     @asynccontextmanager
