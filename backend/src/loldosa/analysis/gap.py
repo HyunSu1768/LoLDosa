@@ -113,7 +113,8 @@ def jungler_features(match: dict, tl: dict, puuid: str) -> dict | None:
     mins = info["gameDuration"] / 60
     ch = me.get("challenges", {}) or {}
     pid = me["participantId"]
-    out: dict[str, float | None] = {"win": bool(me["win"]), "champion_id": me["championId"]}
+    out: dict[str, float | None] = {"win": bool(me["win"]), "champion_id": me["championId"],
+                                    "patch": ".".join(info.get("gameVersion", "").split(".")[:2])}
 
     f10, f15 = _frame(tl, 10, pid), _frame(tl, 15, pid)
     out["jcs10"] = ch.get("jungleCsBefore10Minutes", f10["jungleMinionsKilled"] if f10 else None)

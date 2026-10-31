@@ -29,8 +29,18 @@ WATCH_AT = {"jcs10": 55, "cs15": 55, "first_recall": None, "lv6_time": None, "kp
             "getback_pings": 150, "vision_pings": 300}
 
 
+def _pkey(p):
+    try:
+        return tuple(int(x) for x in p.split("."))
+    except ValueError:
+        return (0,)
+
+
 def exemplars(rows, ref, names, per=4):
-    """프로 경기 중 그 지표를 가장 잘한 판 (선수 중복 없이). 같은 패치 동안 클라이언트에서 리플레이로 볼 수 있다."""
+    """프로 경기 중 그 지표를 가장 잘한 판 (선수 중복 없이). 리플레이는 같은 패치에서만 열려서 최신 패치 경기만 쓴다."""
+    latest = max((r.get("patch", "") for r in rows), key=_pkey, default="")
+    rows = [r for r in rows if r.get("patch") == latest]
+    ref["exemplar_patch"] = latest
     out = {}
     for key, r in ref["features"].items():
         if not r["validated"]:

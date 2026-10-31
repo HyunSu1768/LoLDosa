@@ -1446,6 +1446,7 @@
    "203": -3
   }
  },
+ "exemplar_patch": "16.21",
  "exemplars": {
   "jcs10": [
    {
@@ -1507,10 +1508,10 @@
     "win": true
    },
    {
-    "match_id": "KR_8423471124",
-    "player": "Tarzan",
-    "champion_id": 5,
-    "value": 116,
+    "match_id": "KR_8437607684",
+    "player": "Pyosik",
+    "champion_id": 203,
+    "value": 117,
     "t": 55,
     "win": true
    }
@@ -1533,18 +1534,18 @@
     "win": true
    },
    {
-    "match_id": "KR_8420587672",
-    "player": "Lucid",
-    "champion_id": 81,
-    "value": 0.6111111111111112,
-    "t": 240,
-    "win": true
-   },
-   {
     "match_id": "KR_8437607684",
     "player": "Pyosik",
     "champion_id": 203,
     "value": 0.6129032258064516,
+    "t": 240,
+    "win": true
+   },
+   {
+    "match_id": "KR_8439348313",
+    "player": "Sponge",
+    "champion_id": 64,
+    "value": 0.6176470588235294,
     "t": 240,
     "win": true
    }
@@ -1555,14 +1556,6 @@
     "player": "Sponge",
     "champion_id": 64,
     "value": 0.09015421115065243,
-    "t": 240,
-    "win": true
-   },
-   {
-    "match_id": "KR_8420547774",
-    "player": "Lucid",
-    "champion_id": 64,
-    "value": 0.07875457875457875,
     "t": 240,
     "win": true
    },
@@ -1581,25 +1574,17 @@
     "value": 0.07476635514018691,
     "t": 240,
     "win": true
+   },
+   {
+    "match_id": "KR_8438010727",
+    "player": "Pyosik",
+    "champion_id": 517,
+    "value": 0.0694980694980695,
+    "t": 240,
+    "win": true
    }
   ],
   "vision_pm": [
-   {
-    "match_id": "KR_8409389591",
-    "player": "Cuzz",
-    "champion_id": 246,
-    "value": 1.4279156588422102,
-    "t": 480,
-    "win": true
-   },
-   {
-    "match_id": "KR_8375195895",
-    "player": "Kanavi",
-    "champion_id": 31,
-    "value": 1.4539881939408978,
-    "t": 480,
-    "win": true
-   },
    {
     "match_id": "KR_8435301346",
     "player": "Vincenzo",
@@ -1609,10 +1594,26 @@
     "win": true
    },
    {
-    "match_id": "KR_8420430355",
-    "player": "Canyon",
-    "champion_id": 799,
-    "value": 1.467898603216618,
+    "match_id": "KR_8436373919",
+    "player": "Willer",
+    "champion_id": 246,
+    "value": 1.4681552724115334,
+    "t": 480,
+    "win": true
+   },
+   {
+    "match_id": "KR_8427884879",
+    "player": "Raptor",
+    "champion_id": 64,
+    "value": 1.5132727522927099,
+    "t": 480,
+    "win": true
+   },
+   {
+    "match_id": "KR_8438824239",
+    "player": "Sponge",
+    "champion_id": 246,
+    "value": 1.538393755022952,
     "t": 480,
     "win": true
    }
@@ -1627,14 +1628,6 @@
     "win": true
    },
    {
-    "match_id": "KR_8375096382",
-    "player": "Kanavi",
-    "champion_id": 246,
-    "value": 0.19672131147540983,
-    "t": 480,
-    "win": true
-   },
-   {
     "match_id": "KR_8436373919",
     "player": "Willer",
     "champion_id": 246,
@@ -1643,10 +1636,18 @@
     "win": true
    },
    {
-    "match_id": "KR_8408800790",
-    "player": "Cuzz",
-    "champion_id": 59,
-    "value": 0.19758507135016465,
+    "match_id": "KR_8436920522",
+    "player": "Vincenzo",
+    "champion_id": 31,
+    "value": 0.21363173957273654,
+    "t": 480,
+    "win": true
+   },
+   {
+    "match_id": "KR_8437991285",
+    "player": "Pyosik",
+    "champion_id": 203,
+    "value": 0.25641025641025644,
     "t": 480,
     "win": true
    }
@@ -1677,45 +1678,45 @@
     "win": true
    },
    {
-    "match_id": "KR_8423471124",
-    "player": "Tarzan",
-    "champion_id": 5,
-    "value": 210.935,
-    "t": 190.935,
+    "match_id": "KR_8434997523",
+    "player": "Raptor",
+    "champion_id": 517,
+    "value": 210.581,
+    "t": 190.581,
     "win": true
    }
   ],
   "lv6_time": [
    {
-    "match_id": "KR_8419569432",
-    "player": "Tarzan",
+    "match_id": "KR_8434997523",
+    "player": "Raptor",
+    "champion_id": 517,
+    "value": 386.174,
+    "t": 366.174,
+    "win": true
+   },
+   {
+    "match_id": "KR_8434143762",
+    "player": "Vincenzo",
+    "champion_id": 91,
+    "value": 375.251,
+    "t": 355.251,
+    "win": true
+   },
+   {
+    "match_id": "KR_8439348313",
+    "player": "Sponge",
     "champion_id": 64,
-    "value": 396.6,
-    "t": 376.6,
+    "value": 373.943,
+    "t": 353.943,
     "win": true
    },
    {
-    "match_id": "KR_8419501041",
-    "player": "Canyon",
-    "champion_id": 126,
-    "value": 392.29,
-    "t": 372.29,
-    "win": true
-   },
-   {
-    "match_id": "KR_8220843910",
-    "player": "Peanut",
-    "champion_id": 64,
-    "value": 388.498,
-    "t": 368.498,
-    "win": true
-   },
-   {
-    "match_id": "KR_8418330616",
-    "player": "Oner",
-    "champion_id": 246,
-    "value": 388.288,
-    "t": 368.288,
+    "match_id": "KR_8437873253",
+    "player": "Pyosik",
+    "champion_id": 950,
+    "value": 365.702,
+    "t": 345.702,
     "win": true
    }
   ],
@@ -1729,14 +1730,6 @@
     "win": true
    },
    {
-    "match_id": "KR_8418410573",
-    "player": "Oner",
-    "champion_id": 876,
-    "value": 3.037974683544304,
-    "t": 150,
-    "win": true
-   },
-   {
     "match_id": "KR_8438044985",
     "player": "Pyosik",
     "champion_id": 950,
@@ -1745,31 +1738,23 @@
     "win": true
    },
    {
-    "match_id": "KR_8421405918",
-    "player": "Tarzan",
-    "champion_id": 104,
-    "value": 3.0874785591766725,
+    "match_id": "KR_8435301346",
+    "player": "Vincenzo",
+    "champion_id": 143,
+    "value": 4.594835262689226,
+    "t": 150,
+    "win": true
+   },
+   {
+    "match_id": "KR_8438065734",
+    "player": "Sponge",
+    "champion_id": 246,
+    "value": 4.685908319185059,
     "t": 150,
     "win": true
    }
   ],
   "missing_pings": [
-   {
-    "match_id": "KR_8419421087",
-    "player": "Oner",
-    "champion_id": 60,
-    "value": 7,
-    "t": 150,
-    "win": true
-   },
-   {
-    "match_id": "KR_8419501041",
-    "player": "Canyon",
-    "champion_id": 126,
-    "value": 7,
-    "t": 150,
-    "win": true
-   },
    {
     "match_id": "KR_8437375602",
     "player": "Willer",
@@ -1785,17 +1770,25 @@
     "value": 7,
     "t": 150,
     "win": true
-   }
-  ],
-  "omw_pings": [
+   },
    {
-    "match_id": "KR_8418330616",
-    "player": "Oner",
-    "champion_id": 246,
-    "value": 25,
+    "match_id": "KR_8438671835",
+    "player": "Sponge",
+    "champion_id": 64,
+    "value": 7,
     "t": 150,
     "win": true
    },
+   {
+    "match_id": "KR_8438010727",
+    "player": "Pyosik",
+    "champion_id": 517,
+    "value": 7,
+    "t": 150,
+    "win": true
+   }
+  ],
+  "omw_pings": [
    {
     "match_id": "KR_8437607684",
     "player": "Pyosik",
@@ -1805,31 +1798,31 @@
     "win": true
    },
    {
-    "match_id": "KR_8409299023",
-    "player": "Cuzz",
-    "champion_id": 59,
-    "value": 28,
+    "match_id": "KR_8435469211",
+    "player": "Willer",
+    "champion_id": 163,
+    "value": 29,
     "t": 150,
     "win": true
    },
    {
-    "match_id": "KR_8417418667",
-    "player": "Lucid",
-    "champion_id": 64,
-    "value": 29,
+    "match_id": "KR_8435301346",
+    "player": "Vincenzo",
+    "champion_id": 143,
+    "value": 35,
+    "t": 150,
+    "win": true
+   },
+   {
+    "match_id": "KR_8438065734",
+    "player": "Sponge",
+    "champion_id": 246,
+    "value": 35,
     "t": 150,
     "win": true
    }
   ],
   "getback_pings": [
-   {
-    "match_id": "KR_8420430355",
-    "player": "Canyon",
-    "champion_id": 799,
-    "value": 7,
-    "t": 150,
-    "win": true
-   },
    {
     "match_id": "KR_8438065734",
     "player": "Sponge",
@@ -1839,39 +1832,31 @@
     "win": true
    },
    {
-    "match_id": "KR_8220843910",
-    "player": "Peanut",
-    "champion_id": 64,
-    "value": 8,
+    "match_id": "KR_8435469211",
+    "player": "Willer",
+    "champion_id": 163,
+    "value": 11,
     "t": 150,
     "win": true
    },
    {
-    "match_id": "KR_8408800790",
-    "player": "Cuzz",
-    "champion_id": 59,
+    "match_id": "KR_8434098778",
+    "player": "Vincenzo",
+    "champion_id": 203,
     "value": 11,
+    "t": 150,
+    "win": true
+   },
+   {
+    "match_id": "KR_8434997523",
+    "player": "Raptor",
+    "champion_id": 517,
+    "value": 16,
     "t": 150,
     "win": true
    }
   ],
   "vision_pings": [
-   {
-    "match_id": "KR_8420509109",
-    "player": "Canyon",
-    "champion_id": 126,
-    "value": 4,
-    "t": 300,
-    "win": true
-   },
-   {
-    "match_id": "KR_8418410573",
-    "player": "Oner",
-    "champion_id": 876,
-    "value": 5,
-    "t": 300,
-    "win": true
-   },
    {
     "match_id": "KR_8439377372",
     "player": "Sponge",
@@ -1881,10 +1866,26 @@
     "win": true
    },
    {
-    "match_id": "KR_8375195895",
-    "player": "Kanavi",
-    "champion_id": 31,
-    "value": 6,
+    "match_id": "KR_8434997523",
+    "player": "Raptor",
+    "champion_id": 517,
+    "value": 8,
+    "t": 300,
+    "win": true
+   },
+   {
+    "match_id": "KR_8437468230",
+    "player": "Willer",
+    "champion_id": 163,
+    "value": 8,
+    "t": 300,
+    "win": true
+   },
+   {
+    "match_id": "KR_8434098778",
+    "player": "Vincenzo",
+    "champion_id": 203,
+    "value": 8,
     "t": 300,
     "win": true
    }
