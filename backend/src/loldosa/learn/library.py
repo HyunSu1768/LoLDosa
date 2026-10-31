@@ -33,6 +33,7 @@ class Progress:
         self.data.setdefault("read", {})  # id -> 처음 읽은 시각
         self.data.setdefault("quiz", {})  # id -> {"correct": n, "total": n}
         self.data.setdefault("flags", {})  # id -> [match_id, ...] 리뷰에서 지적된 경기
+        self.data.setdefault("checks", {})  # match_id -> {"date":..., "champion":..., "checks": [...]}
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -57,6 +58,35 @@ class Progress:
                 changed = True
         if changed:
             self.save()
+
+    def record_checks(self, match_id: str, summary: dict, checks: list[dict]) -> None:
+        if not checks:
+            return
+        self.data["checks"][match_id] = {"date": summary.get("date"), "champion": summary.get("champion"),
+                                         "win": summary.get("win"), "checks": checks}
+        self.save()
+
+    def history(self, concept: str | None = None, limit: int = 20) -> list[dict]:
+        """최근 경기(날짜 내림차순)의 체크 기록. concept 을 주면 그 개념만."""
+        rows = sorted(self.data["checks"].items(), key=lambda kv: kv[1].get("date") or "", reverse=True)[:limit]
+        out = []
+        for mid, r in rows:
+            checks = r["checks"] if not concept else [c for c in r["checks"] if c["concept"] == concept]
+            out.append({"match_id": mid, "date": r.get("date"), "champion": r.get("champion"), "win": r.get("win"),
+                        "checks": checks})
+        return out
+
+    def skill_rates(self, limit: int = 10) -> dict[str, dict]:
+        """개념별 최근 N경기 달성률 (해당 없음 제외)."""
+        out: dict[str, dict] = {}
+        for h in self.history(limit=limit):
+            for c in h["checks"]:
+                if c["status"] == "na":
+                    continue
+                r = out.setdefault(c["concept"], {"pass": 0, "total": 0})
+                r["total"] += 1
+                r["pass"] += c["status"] == "pass"
+        return out
 
     def recommended(self, library: dict, limit: int = 6) -> list[dict]:
         """리뷰에서 자주 지적됐고 아직 퀴즈를 못 푼 개념부터."""

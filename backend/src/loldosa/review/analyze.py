@@ -72,6 +72,8 @@ class Review:
     paths: dict = field(default_factory=dict)
     evidence: list = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    facts: dict = field(default_factory=dict)  # 개념 체크용 구조화 값
+    checks: list = field(default_factory=list)  # learn.skills 의 개념 체크 결과
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -166,6 +168,9 @@ class Reviewer:
         rv.lessons.sort(key=lambda l: -l.severity)
         for l in rv.lessons + rv.strengths:
             l.concepts = lesson_concepts(l.title)
+        if rv.is_jungle:
+            from ..learn.skills import evaluate
+            rv.checks = evaluate(rv.facts)
         return rv
 
     # ------------------------------------------------------------------ helpers
@@ -276,6 +281,8 @@ class Reviewer:
         tot = sum(r["games"] for r in clears)
         full = sum(r["games"] for r in clears if r["clear3"] == "full_clear") / tot if tot else None
         camps3 = (fr.get(3, {}).get("jcs") or 0) // 4 if fr.get(3) else None
+        rv.facts["camps3"] = camps3
+        rv.facts["full_clear_rate"] = full
         early_lane = next((e for e in events if e["type"] == "CHAMPION_KILL" and e["ts_ms"] < 210000
                            and self.involved(e, pid)), None)
         if camps3 is not None:
@@ -296,6 +303,7 @@ class Reviewer:
         f10 = fr.get(10)
         if f10 and c and c.get("jungle_cs10"):
             mine10, avg10 = f10["jcs"] or 0, c["jungle_cs10"]
+            rv.facts.update(cs10=mine10, cs10_bench=avg10)
             r = mine10 / avg10 if avg10 else 1
             verdict = "bad" if r < 0.85 else "good" if r > 1.05 else "neutral"
             ev = metric("10분 정글 CS", f"{mine10}", f"{avg10:.0f}", verdict, f"10분 정글 몬스터 CS {mine10}",
@@ -327,6 +335,9 @@ class Reviewer:
 
         # 4) 10분 전 데스 / 킬관여
         deaths10 = [e for e in events if e["type"] == "CHAMPION_KILL" and e["ts_ms"] < 600000 and e["victim_id"] == pid]
+        rv.facts["deaths10"] = len(deaths10)
+        rv.facts["risky_deaths10"] = sum(1 for e in deaths10
+                                         if relative_region(team, e["x"], e["y"]) in ("enemy_jungle", "river"))
         tk10 = [e for e in events if e["type"] == "CHAMPION_KILL" and e["ts_ms"] < 600000
                 and e["victim_id"] != pid and self.involved(e, pid)]
         if c:
@@ -382,6 +393,10 @@ class Reviewer:
                 ev = [self.mine(f"{mmss(t)} 적 {josa(self.name(ejg['champion_id']), '이가')} {REGION_KO[lane]}에서 아군 "
                                 f"{self.name(victim['champion_id'])} 처치에 관여, 그때 내 위치 "
                                 f"{REGION_KO[relative_region(team, *p)]}")]
+                rv.facts["enemy_ganks10"] = sum(
+                    1 for x in events if x["type"] == "CHAMPION_KILL" and x["ts_ms"] < 600000
+                    and self.by_pid.get(x["victim_id"], {}).get("team_id") == team and x["victim_id"] != pid
+                    and self.involved(x, ejg["participant_id"]) and region(x["x"], x["y"]) in ("top", "mid", "bot"))
                 rv.lessons.append(Lesson(
                     f"{mmss(t)} 적 정글 {REGION_KO[lane]} 갱 허용",
                     f"적 {josa(self.name(ejg['champion_id']), '이가')} {mmss(t)}에 {REGION_KO[lane]}에서 아군 "
@@ -407,6 +422,7 @@ class Reviewer:
             recent = lost_once.get(e["monster_type"])
             if not ours and d > FAR and (recent is None or t - recent > 180):
                 lost_once[e["monster_type"]] = t
+                rv.facts["far_lost"] = rv.facts.get("far_lost", 0) + 1
                 med = {"DRAGON": times.get("first_dragon_median_s"), "HORDE": times.get("first_grub_median_s"),
                        "RIFTHERALD": times.get("herald_median_s")}.get(e["monster_type"])
                 ev = [self.mine(f"{mmss(t)} 적 {obj} 획득, 그때 나와의 거리 {d:,.0f}")]
@@ -428,6 +444,7 @@ class Reviewer:
             minutes = rv_minutes = max(self.store._x("SELECT duration_s FROM matches WHERE match_id=?",
                                                       [rv.match_id])[0][0] / 60, 1)
             vpm = (me["vision_score"] or 0) / minutes
+            rv.facts.update(vision_pm=vpm, vision_bench=c.get("vision_pm"))
             if c.get("vision_pm"):
                 verdict = "bad" if vpm < c["vision_pm"] * 0.75 else "good" if vpm > c["vision_pm"] * 1.15 else "neutral"
                 ev = metric("분당 시야 점수", f"{vpm:.2f}", f"{c['vision_pm']:.2f}", verdict,
@@ -466,6 +483,7 @@ class Reviewer:
                           self.bench(f"{cname} {BAND_KO[band]} 정글 교전 승률 {pct(rate)} (n={d[band]['fights']})",
                                      d[band]["fights"])]
                     if not won and rate < 0.45:
+                        rv.facts["bad_band_fight"] = True
                         rv.lessons.append(Lesson(f"{mmss(t)} 불리한 레벨 구간 교전",
                                                  f"{BAND_KO[band]}에 적 정글과 싸워 졌습니다. 고티어 {cname}도 이 구간 정글 교전 승률이 "
                                                  f"{pct(rate)}로 낮은 편이라, 이 시점엔 교전을 피하고 성장했어야 합니다.", 2, ev))
@@ -479,6 +497,7 @@ class Reviewer:
         cname = self.name(champ)
         mine = [v for v in self.visits if v.participant_id == pid]
         first = next((v for v in mine if not v.death_back), None)
+        rv.facts["first_recall_s"] = first.ts_ms / 1000 if first else None
         fr = self.stats.first_recall(s, champ)
         if first and fr and fr["games"] >= 10:
             t = first.ts_ms / 1000
@@ -499,6 +518,7 @@ class Reviewer:
             lanes = [p["participant_id"] for p in self.by_pid.values()
                      if p["team_id"] == team and p["position"] in OBJECTIVE_LANES[obj]]
             turn = team_turn(self.visits, e["ts_ms"], pid, lanes)
+            rv.facts.setdefault("obj_turns", {})[obj] = {"turn": turn, "took": e["team_id"] == team}
             took = e["team_id"] == team
             stats = self.stats.turn_objective(s, obj)
             name = TURN_OBJ_KO[obj]
@@ -539,6 +559,7 @@ class Reviewer:
             f = self.frames.get(pid, {}).get(int(e["ts_ms"] // 60000)) or {}
             cur = f.get("cur")
             if cur is not None and cur >= 1200:
+                rv.facts["gold_death"] = cur
                 t = e["ts_ms"] / 1000
                 rv.lessons.append(Lesson(
                     f"{mmss(t)} 골드를 들고 사망",

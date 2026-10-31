@@ -71,7 +71,7 @@ WITH dist AS (
     FROM dist a JOIN dist b ON a.match_id = b.match_id AND a.pid = b.pid AND a.rk = 1 AND b.rk = 2
     JOIN gfr f1 ON f1.match_id = a.match_id AND f1.pid = a.pid AND f1.minute = 1
 ), at3 AS (
-    -- 정글 몬스터 CS 는 캠프당 4씩 오른다. 스커틀은 3:30 생성이라 3:00 값은 캠프 수만 반영
+    -- 정글 몬스터 CS 는 캠프당 4씩 오른다. 스커틀은 2:55 생성(26.1)이라 3:00 값은 거의 캠프 몫이다
     SELECT match_id, pid, rel_region(team_id, x, y) AS route3, map_side(x, y) AS side3,
            jungle_cs // 4 AS camps3,
            CASE WHEN jungle_cs // 4 >= 6 THEN 'full_clear'

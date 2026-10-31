@@ -3,32 +3,42 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LoLDosa · 정글 브리핑</title>
+<title>LoLDosa · 정글 코치</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <header>
   <div class="brand">LoL<b>Dosa</b></div>
   <nav>
-    <button class="tab active" data-tab="brief">브리핑</button>
-    <button class="tab" data-tab="review">경기 리뷰</button>
+    <button class="tab active" data-tab="home">홈</button>
+    <button class="tab" data-tab="brief">게임 전 브리핑</button>
+    <button class="tab" data-tab="review">경기 복기</button>
     <button class="tab" data-tab="learn">개념 학습</button>
     <button class="tab" data-tab="settings">설정</button>
   </nav>
   <div class="pills">
-    <label class="toggle" title="모든 문장 옆에 수치·표본 수·출처를 표시합니다"><input type="checkbox" id="show-ev"> 근거 보기</label>
+    <label class="toggle" title="문장 옆에 수치·표본 수·출처를 표시합니다"><input type="checkbox" id="show-ev"> 근거 보기</label>
     <span id="pill-lcu" class="pill">클라이언트</span>
-    <span id="pill-ai" class="pill">AI</span>
     <span id="pill-ws" class="pill">연결 중</span>
   </div>
 </header>
 
+<!-- 용어 툴팁 -->
+<div id="term-tip" class="term-tip hidden"></div>
+
+<!-- ============================ 홈 ============================ -->
+<section id="tab-home" class="tabpane active">
+  <div id="onboarding" class="onboarding hidden"></div>
+  <div id="home" class="home"></div>
+</section>
+
 <!-- ============================ 브리핑 ============================ -->
-<section id="tab-brief" class="tabpane active">
+<section id="tab-brief" class="tabpane">
   <div id="brief-idle" class="empty">
     <div class="empty-icon">⏳</div>
     <h2>챔피언 선택을 기다리는 중</h2>
-    <p>롤에서 랭크 게임 챔피언 선택에 들어가면 자동으로 브리핑이 뜹니다.</p>
+    <p>롤에서 랭크 게임 챔피언 선택에 들어가면 이 화면이 자동으로 채워져요.</p>
+    <div id="idle-focus"></div>
     <p id="status-line" class="muted"></p>
   </div>
 
@@ -44,8 +54,10 @@
     </aside>
 
     <div class="brief-main">
-      <div id="ended-banner" class="banner hidden">챔피언 선택이 끝났어요 — 로딩 화면에서도 이 브리핑을 계속 볼 수 있어요.</div>
+      <div id="ended-banner" class="banner hidden">챔피언 선택이 끝났어요 — 로딩 화면에서 아래 플랜을 한 번 더 읽어 보세요.</div>
       <div class="stage-line"><span id="stage"></span><span id="matchup-title"></span></div>
+
+      <div id="focus-banner" class="focus-banner hidden"></div>
       <div id="notes"></div>
 
       <div id="picks-box" class="panel hidden">
@@ -56,7 +68,7 @@
       </div>
 
       <div id="plan-box" class="plan hidden">
-        <div class="plan-head"><h2>이번 판 플랜</h2><span class="muted">고티어 경기 데이터 기준 · 근거가 있는 것만</span></div>
+        <div class="plan-head"><h2>이번 판 플랜</h2><span class="muted">줄마다 '왜?'를 누르면 개념 설명이 나와요</span></div>
         <ol id="plan"></ol>
       </div>
 
@@ -66,13 +78,14 @@
         <p id="ai-status" class="muted"></p>
       </div>
 
-      <div class="cards-head"><h3>자세히 보기</h3><button id="expand-all" class="link">모두 펼치기</button></div>
-      <div id="cards" class="cards"></div>
+      <details class="more"><summary>자세한 데이터 보기 <span class="muted">(동선·갱·매치업·오브젝트·조합)</span></summary>
+        <div id="cards" class="cards"></div>
+      </details>
     </div>
   </div>
 </section>
 
-<!-- ============================ 경기 리뷰 ============================ -->
+<!-- ============================ 경기 복기 ============================ -->
 <section id="tab-review" class="tabpane">
   <div class="review-bar">
     <input id="riot-id" placeholder="닉네임#태그 (예: Hide on bush#KR1)">
@@ -83,7 +96,7 @@
   <div class="review">
     <ul id="match-list" class="match-list"></ul>
     <div id="review-detail" class="review-detail">
-      <div class="empty small"><p>왼쪽에서 경기를 고르면 리뷰가 나와요.</p></div>
+      <div class="empty small"><p>왼쪽에서 경기를 고르면 복기가 시작돼요.</p></div>
     </div>
   </div>
 </section>
@@ -97,7 +110,7 @@
       <div id="learn-list"></div>
     </aside>
     <div id="learn-detail" class="learn-detail">
-      <div class="empty small"><h2>롤 개념 학습</h2><p>왼쪽에서 개념을 고르세요. 경기 리뷰에서 지적된 개념은 '추천 학습'에 모여요.</p></div>
+      <div class="empty small"><h2>롤 개념 학습</h2><p>왼쪽에서 개념을 고르세요. 복기에서 지적된 개념은 위쪽 '추천 학습'에 모여요.</p></div>
     </div>
   </div>
 </section>
@@ -105,7 +118,7 @@
 <!-- ============================ 설정 ============================ -->
 <section id="tab-settings" class="tabpane">
   <div class="settings">
-    <div class="field"><label>내 Riot ID</label><input id="set-riot-id" placeholder="닉네임#태그"><p class="muted">경기 리뷰에 사용합니다.</p></div>
+    <div class="field"><label>내 Riot ID</label><input id="set-riot-id" placeholder="닉네임#태그"><p class="muted">경기 복기에 사용합니다.</p></div>
     <div class="field"><label>비교 기준 티어 (갱 판단 등)</label>
       <select id="set-bucket"><option value="platinum">플래티넘 (내 티어대)</option><option value="apex">마스터 이상</option></select>
       <p class="muted">상대 반응이 중요한 항목(갱 대상)은 이 티어 데이터를 우선 씁니다. 표본이 부족하면 마스터+ 데이터를 씁니다.</p></div>

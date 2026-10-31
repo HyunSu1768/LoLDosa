@@ -301,7 +301,7 @@ class BriefingEngine:
                 by_clear[r["clear3"]] = by_clear.get(r["clear3"], 0) + r["games"]
             share = {k: by_clear.get(k, 0) / tot for k in CLEAR_KO}
             parts = ", ".join(f"{CLEAR_KO[k]} {pct(v)}" for k, v in share.items())
-            e2 = self.e(f"{self.name(champ)} 3:00 시점 완료 캠프 수(정글 CS ÷ 4, 스커틀 생성 전): {parts} (n={tot})", tot)
+            e2 = self.e(f"{self.name(champ)} 3:00 시점 완료 캠프 수(정글 CS ÷ 4, 스커틀은 2:55 생성이라 대부분 캠프 몫): {parts} (n={tot})", tot)
             card.add(f"3:00까지 클리어: {parts}", e2)
 
             def where(kind: str) -> tuple[str, int]:
@@ -336,7 +336,7 @@ class BriefingEngine:
             if tot >= MIN_INFER:
                 if main_kind == "full_clear" and main_share >= 0.5:
                     card.headline = f"{self.name(champ)}: 풀클리어 중심 (3:00까지 6캠프 {pct(main_share)})"
-                    card.add(f"고티어 {josa(self.name(champ))} 대부분 3분 안에 6캠프를 다 돌고, 그 뒤 스커틀(3:30)이나 "
+                    card.add(f"고티어 {josa(self.name(champ))} 대부분 3분 안에 6캠프를 다 돌고, 그 뒤 스커틀(2:55 생성)이나 "
                              f"라인으로 이동합니다.", e2, kind="inference")
                 elif share["three_or_less"] >= 0.35:
                     card.headline = f"{self.name(champ)}: 3캠프 후 이른 개입 비중 높음 ({pct(share['three_or_less'])})"

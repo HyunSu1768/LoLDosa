@@ -121,7 +121,8 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
         briefing = await asyncio.to_thread(engine.build, state)
         b = briefing.to_dict()
         await hub.send({"type": "briefing", "state": state_view(state, champs), "briefing": b,
-                        "ddragon": champs.version})
+                        "ddragon": champs.version,
+                        "focus": concept_brief(user.focus_concept) if user.focus_concept else None})
         # AI 는 비용·시간이 들어서 의미 있는 시점에만: 내 픽 확정 직후, 전원 확정
         if coach and user.ai_enabled and state.stage in (Stage.POST_MY_PICK, Stage.FINAL) and b["cards"]:
             key = (state.stage.value, b["my_champion"], b["enemy_jungler"],
@@ -206,7 +207,10 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
 
     @app.get("/api/learn")
     async def learn_index():
-        items = [{k: c.get(k) for k in ("id", "category", "title", "en", "level", "summary")}
+        from ..learn.skills import CHECKS
+
+        items = [{**{k: c.get(k) for k in ("id", "category", "title", "en", "level", "summary", "aliases")},
+                  "measurable": c["id"] in CHECKS}
                  for c in library.get("concepts", [])]
         return {"version": library.get("version", ""), "categories": library.get("categories", []),
                 "concepts": items, "read": progress.data["read"], "quiz": progress.data["quiz"],
@@ -219,8 +223,15 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
             raise HTTPException(404, "없는 개념입니다")
         progress.mark_read(cid)
         related = [{"id": r, "title": by_id[r]["title"]} for r in c.get("related", []) if r in by_id]
+        from ..learn.skills import CHECKS
+
+        hist = [{"date": h["date"], "champion": h["champion"],
+                 "status": h["checks"][0]["status"] if h["checks"] else "na",
+                 "value": h["checks"][0]["value"] if h["checks"] else ""} for h in progress.history(cid, 10)]
         return {**c, "related": related, "quiz_progress": progress.data["quiz"].get(cid),
-                "flagged": len(progress.data["flags"].get(cid, []))}
+                "flagged": len(progress.data["flags"].get(cid, [])),
+                "goal": CHECKS[cid][0] if cid in CHECKS else None, "history": [h for h in hist if h["status"] != "na"],
+                "is_focus": user.focus_concept == cid}
 
     @app.post("/api/learn/{cid}/quiz")
     async def learn_quiz(cid: str, body: dict = Body(...)):
@@ -251,12 +262,30 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
                     user.update({"riot_id": riot_id, "puuid": puuid}).save(settings.data_dir)
                     with personal_store() as st:
                         await sync_personal(riot, st, puuid, int(body.get("count", 10)), say=lambda *_: None)
-                        return list_matches(st, puuid, 30)
+                        games = list_matches(st, puuid, 30)
+            # 새로 받은 경기는 바로 분석해서 성장 기록(개념 체크)을 채운다
+            for g in games:
+                if g["match_id"] not in progress.data["checks"] and g["position"] == "JUNGLE":
+                    try:
+                        async with personal_lock:
+                            await asyncio.to_thread(_review, g["match_id"])
+                    except Exception:  # noqa: BLE001
+                        log.exception("auto review failed %s", g["match_id"])
+            return annotate(games)
         except ValueError as e:
             raise HTTPException(400, str(e))
         except RiotApiError as e:
             raise HTTPException(502, "Riot 이 키를 거부했습니다 (.env 의 RIOT_API_KEY 확인)" if e.status in (401, 403)
                                 else str(e))
+
+    def annotate(games: list[dict]) -> list[dict]:
+        for g in games:
+            rec = progress.data["checks"].get(g["match_id"])
+            checks = rec["checks"] if rec else []
+            g["fails"] = [c["concept"] for c in checks if c["status"] == "fail"]
+            focus = next((c for c in checks if c["concept"] == user.focus_concept), None)
+            g["focus_status"] = focus["status"] if focus else None
+        return games
 
     @app.get("/api/review/matches")
     async def review_matches():
@@ -266,18 +295,80 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
             return []
         async with personal_lock:
             with personal_store() as st:
-                return list_matches(st, user.puuid, 30)
+                return annotate(list_matches(st, user.puuid, 30))
 
     def _review(match_id: str) -> dict:
         from ..review.analyze import Reviewer
 
         with personal_store() as st:
             rv = Reviewer(st, stats, champs).review(match_id, user.puuid).to_dict()
-        # 리뷰에서 지적된 개념은 '추천 학습'으로 쌓는다
+        # 리뷰에서 지적된 개념은 '추천 학습'으로 쌓고, 개념 체크는 성장 기록으로 남긴다
         progress.flag({c for l in rv["lessons"] for c in l["concepts"] if c in by_id}, match_id)
+        progress.record_checks(match_id, rv["summary"], rv["checks"])
+        for c in rv["checks"]:
+            c["title"] = by_id.get(c["concept"], {}).get("title", c["concept"])
+            c["focus"] = c["concept"] == user.focus_concept
         for l in rv["lessons"] + rv["strengths"]:
             l["concepts"] = [{"id": c, "title": by_id[c]["title"]} for c in l["concepts"] if c in by_id]
+        rv["key_lesson"] = key_lesson(rv)
         return rv
+
+    def key_lesson(rv: dict) -> dict | None:
+        """이 경기에서 하나만 배운다면: 연습 목표 개념의 실패 > 가장 심각한 피드백."""
+        focus_fail = next((c for c in rv["checks"] if c["focus"] and c["status"] == "fail"), None)
+        pick = None
+        if focus_fail:
+            pick = next((l for l in rv["lessons"] if any(x["id"] == focus_fail["concept"] for x in l["concepts"])), None)
+        pick = pick or (rv["lessons"][0] if rv["lessons"] else None)
+        if not pick or not pick["concepts"]:
+            return None
+        cid = (focus_fail or {}).get("concept") or pick["concepts"][0]["id"]
+        c = by_id.get(cid)
+        if not c:
+            return None
+        return {"lesson": pick, "concept": {k: c.get(k) for k in ("id", "title", "summary", "definition", "how")}}
+
+    def concept_brief(cid: str) -> dict | None:
+        c = by_id.get(cid)
+        if not c:
+            return None
+        from ..learn.skills import CHECKS
+        return {"id": cid, "title": c["title"], "summary": c.get("summary"), "how": (c.get("how") or [])[:3],
+                "goal": CHECKS[cid][0] if cid in CHECKS else None}
+
+    @app.get("/api/home")
+    async def home():
+        from ..learn.skills import CHECKS
+
+        rates = progress.skill_rates(10)
+        skills = []
+        for cid, (goal, _) in CHECKS.items():
+            r = rates.get(cid, {"pass": 0, "total": 0})
+            skills.append({"id": cid, "title": by_id.get(cid, {}).get("title", cid), "goal": goal,
+                           "pass": r["pass"], "total": r["total"]})
+        measured = [x for x in skills if x["total"] >= 3]
+        suggest = min(measured, key=lambda x: x["pass"] / x["total"]) if measured else None
+        focus = None
+        if user.focus_concept:
+            focus = {**(concept_brief(user.focus_concept) or {"id": user.focus_concept}),
+                     "history": [{"date": h["date"], "champion": h["champion"],
+                                  "status": h["checks"][0]["status"] if h["checks"] else "na",
+                                  "value": h["checks"][0]["value"] if h["checks"] else ""}
+                                 for h in progress.history(user.focus_concept, 10)]}
+        return {"riot_id": user.riot_id, "onboarded": user.onboarded, "pool": len(user.champion_pool),
+                "focus": focus, "skills": sorted(skills, key=lambda x: (x["total"] == 0, x["pass"] / max(x["total"], 1))),
+                "suggest": suggest, "recommended": progress.recommended(library),
+                "games_tracked": len(progress.data["checks"]), "stats_ready": stats.available}
+
+    @app.put("/api/focus")
+    async def set_focus(body: dict = Body(...)):
+        from ..learn.skills import CHECKS
+
+        cid = body.get("concept", "")
+        if cid and cid not in CHECKS:
+            raise HTTPException(400, "측정할 수 있는 개념만 연습 목표로 정할 수 있어요")
+        user.update({"focus_concept": cid, "onboarded": True}).save(settings.data_dir)
+        return {"focus": concept_brief(cid) if cid else None}
 
     @app.get("/api/review/{match_id}")
     async def review_match(match_id: str):
