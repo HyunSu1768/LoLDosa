@@ -1,13 +1,15 @@
 {
- "built_at": "2026-10-31T08:49:28",
+ "built_at": "2026-10-31T09:15:54",
  "patches": [
   "16.21",
   "16.20",
   "16.19"
  ],
  "games": {
+  "platinum": 82,
   "apex": 1023,
-  "platinum": 82
+  "emerald": 15,
+  "diamond": 71
  },
- "sha256": "5e82d35a27d7a343101da9d93c4a727eb25303fd438a6d4be41ac6ac6003a917"
+ "sha256": "483e7c0fad802245f11333bf5ec0cfaa7a9f27b8989e43249990e4f70aa60b62"
 }

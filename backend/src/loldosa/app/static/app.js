@@ -200,7 +200,9 @@ async function loadGap() {
   const item = (x, i) => `<div class="gap-item">
       <div class="gap-rank">${i + 1}</div>
       <div class="gap-main"><b>${esc(x.label)}</b>
-        <div class="gap-nums">나 <b>${esc(x.mine_text)}</b>${x.before_text ? ` <span class="muted">(전 ${esc(x.before_text)})</span>` : ""} · 플래티넘 ${esc(x.groups_text.platinum || "-")} · 챌린저 <b>${esc(x.groups_text.challenger || "-")}</b> · 프로 ${esc(x.groups_text.pro || "-")}</div>
+        <div class="gap-nums">나 <b>${esc(x.mine_text)}</b>${x.before_text ? ` <span class="muted">(전 ${esc(x.before_text)})</span>` : ""}</div>
+        <div class="ladder">${["platinum", "emerald", "diamond", "apex", "challenger", "pro"].filter((k) => x.groups_text[k]).map((k) =>
+          `<span class="rung ${k}">${GROUP_KO[k]} <b>${esc(x.groups_text[k])}</b></span>`).join('<span class="arrow">›</span>')}</div>
         <div class="gap-drill">다음 판: ${esc(x.drill)}</div>
         <div class="gap-step">이번 주 목표: <b>${esc(x.step_text)}</b> <span class="muted">(챌린저까지 남은 거리의 1/3 · 판이 쌓이면 다시 계산돼요)</span></div>
         ${x.concept === "communication-pings" ? `<div class="muted small-note">핑 횟수 자체가 목표는 아니에요. 핑을 치려면 미니맵을 보고 있어야 해서, 고수일수록 많이 치는 거예요. 의미 없는 핑 연타는 오히려 팀을 흔들어요.</div>` : ""}
