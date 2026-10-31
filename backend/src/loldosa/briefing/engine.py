@@ -493,11 +493,11 @@ class BriefingEngine:
                 eid = self.e(f"25분 전 대비 35분 후 승률 변화(팀 평균): 아군 {sa[0] * 100:+.1f}%p, 적 {se[0] * 100:+.1f}%p",
                              min(sa[1], se[1]))
                 card.add(f"후반 성향(35분+ 승률 − 25분 전 승률): 아군 {sa[0] * 100:+.1f}%p / 적 {se[0] * 100:+.1f}%p", eid)
-                if sa[0] - se[0] > 0.02:
+                if sa[0] - se[0] > 0.04:
                     card.headline = "우리 팀이 후반형 → 초반 손해 최소화, 오브젝트 스택으로 시간 끌기"
                     card.add("아군이 후반으로 갈수록 유리합니다. 초반 무리한 교전보다 시야·오브젝트 교환으로 성장 시간을 버세요.",
                              eid, kind="inference")
-                elif se[0] - sa[0] > 0.02:
+                elif se[0] - sa[0] > 0.04:
                     card.headline = "적 팀이 후반형 → 25분 전 굴려서 마무리"
                     card.add("적이 후반으로 갈수록 유리합니다. 초반 갱·오브젝트로 격차를 만들고 25분 전후에 끝내는 운영이 필요합니다.",
                              eid, kind="inference")
