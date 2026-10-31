@@ -41,7 +41,7 @@ async def main():
                     continue
                 me = next(p for p in m["info"]["participants"] if p["puuid"] == e["puuid"])
                 if me.get("teamPosition") != "JUNGLE":
-                    if not jungle and len([x for x in ids[:4]]) and mid == ids[3]:
+                    if not jungle and len(ids) >= 4 and mid == ids[3]:
                         break  # 최근 4판에 정글이 없으면 정글러가 아님
                     continue
                 tl = await riot.timeline(mid)

@@ -1,0 +1,27 @@
+name: ci
+
+# 푸시마다: 테스트 + 가짜 롤 클라이언트로 앱 전체 흐름 검증 (챔선 → 브리핑 → 게임 종료 → 자동 복기)
+on:
+  push:
+    branches: [main, "claude/**"]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: uv sync --extra dev
+      - name: Unit tests
+        run: uv run pytest -q
+      - name: End-to-end with fake League client
+        run: |
+          GID=$(uv run python scripts/make_e2e_fixture.py "$RUNNER_TEMP/e2e" | tail -1)
+          LOLDOSA_DATA_DIR="$RUNNER_TEMP/e2e" uv run loldosa ddragon sync
+          uv run python scripts/e2e_fake_client.py "$RUNNER_TEMP/e2e" "$GID"
