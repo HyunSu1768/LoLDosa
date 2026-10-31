@@ -16,9 +16,13 @@ from loldosa.store.matches import MatchStore
 
 
 def match_ids(src: str) -> list[str]:
+    bucket = None
+    if "#" in src:  # matches.duckdb#platinum : 그 버킷 경기만
+        src, bucket = src.split("#", 1)
     if src.endswith(".duckdb"):
         con = duckdb.connect(src, read_only=True)
-        ids = [r[0] for r in con.execute("SELECT match_id FROM matches").fetchall()]
+        ids = [r[0] for r in con.execute("SELECT match_id FROM matches WHERE ? IS NULL OR bucket = ?",
+                                         [bucket, bucket]).fetchall()]
         con.close()
         return ids
     d = json.loads(Path(src).read_text())

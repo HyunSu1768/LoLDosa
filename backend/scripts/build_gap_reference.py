@@ -1,6 +1,6 @@
 """챌린저 갭 기준표 만들기: 그룹별 정글러 지표 → AUC(이긴 판·진 판 분리) → src/loldosa/learn/gap_reference.json
 
-사용: python scripts/build_gap_reference.py <raw_dir> <out.json> <group>=<players.json> ... [apex=<matches.duckdb>]
+사용: python scripts/build_gap_reference.py <raw_dir> <out.json> <group>=<players.json> ... [apex=<matches.duckdb>[#버킷]]
 players.json: {puuid: [match_id, ...]}  /  apex=<duckdb>: 그 DB 경기의 정글러 전원 (고티어 표본)
 고수 그룹: pro, challenger, apex  · 비교 그룹: platinum
 """
@@ -72,9 +72,13 @@ def main():
     for arg in sys.argv[3:]:
         name, path = arg.split("=", 1)
         rows = []
+        bucket = None
+        if "#" in path:  # matches.duckdb#platinum : 그 버킷 경기의 정글러만
+            path, bucket = path.split("#", 1)
         if path.endswith(".duckdb"):
             con = duckdb.connect(path, read_only=True)
-            pairs = con.execute("SELECT puuid, match_id FROM participants WHERE position='JUNGLE'").fetchall()
+            pairs = con.execute("""SELECT p.puuid, p.match_id FROM participants p JOIN matches m USING (match_id)
+                                   WHERE p.position='JUNGLE' AND (? IS NULL OR m.bucket = ?)""", [bucket, bucket]).fetchall()
             con.close()
         else:
             pairs = [(pu, m) for pu, ms in json.loads(Path(path).read_text()).items()
