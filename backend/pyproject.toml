@@ -5,6 +5,7 @@ description = "Jungle champ-select briefing: data pipeline + LCU bridge"
 requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.27",
+    "truststore>=0.9",  # OS 인증서 저장소 사용 (PC방 보안 프로그램 등이 HTTPS 를 가로채는 환경)
     "python-dotenv>=1.0",
     "psutil>=5.9",
     "duckdb>=1.1",

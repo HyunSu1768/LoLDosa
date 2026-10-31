@@ -18,10 +18,9 @@ import psutil
 PROCESS_NAMES = {"LeagueClientUx.exe", "LeagueClientUx"}
 
 DEFAULT_LOCKFILES = {
-    "win32": [
-        Path(r"C:\Riot Games\League of Legends\lockfile"),
-        Path(r"D:\Riot Games\League of Legends\lockfile"),
-    ],
+    # PC방·개인 PC 에서 흔한 위치: 드라이브 C~G × (Riot Games, Games\Riot Games, Program Files\Riot Games)
+    "win32": [Path(f"{d}:\\{base}\\League of Legends\\lockfile")
+              for d in "CDEFG" for base in ("Riot Games", "Games\\Riot Games", "Program Files\\Riot Games", "Riot")],
     "darwin": [
         Path("/Applications/League of Legends.app/Contents/LoL/lockfile"),
         Path.home() / "Applications/League of Legends.app/Contents/LoL/lockfile",
@@ -60,11 +59,20 @@ def parse_cmdline(args: list[str]) -> LcuCredentials | None:
 
 
 def from_process() -> LcuCredentials | None:
+    """클라이언트 프로세스 인자에서 포트·토큰. 관리자 권한으로 도는 롤이면 인자를 못 읽으므로, 실행 파일 위치의 lockfile 도 본다."""
     for proc in psutil.process_iter(["name", "cmdline"]):
         try:
-            if proc.info["name"] in PROCESS_NAMES and (creds := parse_cmdline(proc.info["cmdline"] or [])):
+            if proc.info["name"] not in PROCESS_NAMES and proc.info["name"] not in ("LeagueClient.exe", "LeagueClient"):
+                continue
+            if creds := parse_cmdline(proc.info["cmdline"] or []):
                 return creds
         except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+        try:
+            lock = Path(proc.exe()).parent / "lockfile"
+            if lock.exists():
+                return parse_lockfile(lock.read_text())
+        except (psutil.NoSuchProcess, psutil.AccessDenied, OSError, ValueError):
             continue
     return None
 

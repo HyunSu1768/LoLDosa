@@ -674,8 +674,20 @@ def _utf8_output() -> None:
                 pass
 
 
+def _os_trust_store() -> None:
+    """Windows/macOS 인증서 저장소를 믿게 한다: PC방·회사 보안 프로그램이 HTTPS 를 가로채며 자체 인증서를 심는 환경에서도
+    Riot·Data Dragon·GitHub 연결이 되도록 (certifi 목록에는 그 인증서가 없어서 실패함)."""
+    try:
+        import truststore
+
+        truststore.inject_into_ssl()
+    except Exception:  # noqa: BLE001 — 없거나 실패하면 기본(certifi)으로
+        pass
+
+
 def main(argv: list[str] | None = None) -> int:
     _utf8_output()
+    _os_trust_store()
     args = build_parser().parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.WARNING)
     return args.func(args)

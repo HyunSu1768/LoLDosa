@@ -308,8 +308,15 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
         lcu = LcuClient(creds)
         try:
             ids = await recent_game_ids(lcu, int(body.get("count", 20)))
+        except Exception as e:  # noqa: BLE001
+            log.exception("lcu history failed")
+            from ..lcu.postgame import diag_write
+            diag_write(DIAG, "errors", {"where": "lcu_history", "error": f"{type(e).__name__}: {e}"})
+            raise HTTPException(502, f"롤 클라이언트 전적을 읽지 못했어요. ({type(e).__name__}: {str(e)[:160]})")
         finally:
             await lcu.aclose()
+        if not ids:
+            raise HTTPException(404, "롤 클라이언트 전적에 최근 협곡 게임이 없어요.")
         async with personal_lock:
             await lcu_store_games(ids)
             with personal_store() as st:
@@ -591,8 +598,23 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
         except ValueError as e:
             raise HTTPException(400, str(e))
         except RiotApiError as e:
-            raise HTTPException(502, "Riot이 키를 거부했어요 (.env의 RIOT_API_KEY 확인)" if e.status in (401, 403)
-                                else str(e))
+            raise HTTPException(502, "Riot이 키를 거부했어요. 설정에서 키를 다시 넣어 주세요." if e.status in (401, 403)
+                                else f"Riot 서버 응답이 이상해요 ({e})")
+        except HTTPException:
+            raise
+        except Exception as e:  # noqa: BLE001 — 네트워크·인증서(PC방 보안 프로그램 등) 문제를 사용자에게 그대로 보여 준다
+            log.exception("review sync failed")
+            from ..lcu.postgame import diag_write
+            diag_write(DIAG, "errors", {"where": "review_sync", "error": f"{type(e).__name__}: {e}"})
+            raise HTTPException(502, net_error_say(e))
+
+    def net_error_say(e: Exception) -> str:
+        t = f"{type(e).__name__}: {e}"
+        if "CERTIFICATE" in t.upper() or "SSL" in t.upper():
+            return f"보안 연결(인증서) 확인에 실패했어요. PC방 보안 프로그램이 인터넷 연결을 가로채고 있을 수 있어요. ({t[:160]})"
+        if "Connect" in type(e).__name__ or "Timeout" in type(e).__name__:
+            return f"Riot 서버에 연결하지 못했어요. 인터넷 연결을 확인해 주세요. ({t[:160]})"
+        return f"경기를 가져오다 문제가 생겼어요. ({t[:200]})"
 
     def annotate(games: list[dict]) -> list[dict]:
         for g in games:

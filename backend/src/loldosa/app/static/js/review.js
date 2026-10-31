@@ -18,10 +18,12 @@ export async function startSync({ onDone, riotId = "" } = {}) {
   const key = await api("/api/riot-key").catch(() => ({ set: false }));
   // 1) 키가 있으면 Riot API (Riot ID 가 없으면 서버가 롤 클라이언트에서 내 계정을 읽음) → 2) 실패하면 롤 클라이언트 전적
   if (key.set && !key.problem) {
-    try { list = await post("/api/review/sync", { count: 20, riot_id: riotId }); } catch (e) { errors.push(e.message); }
+    $("#sync-msg", sh).textContent = "Riot 서버에서 가져와요. 처음엔 30초~1분 걸려요.";
+    try { list = await post("/api/review/sync", { count: 20, riot_id: riotId }); } catch (e) { errors.push(`Riot API: ${e.message}`); }
   }
   if (!list) {
-    try { list = await post("/api/review/sync-lcu", { count: 20 }); } catch (e) { errors.push(e.message); }
+    $("#sync-msg", sh).textContent = "롤 클라이언트 전적에서 가져와요.";
+    try { list = await post("/api/review/sync-lcu", { count: 20 }); } catch (e) { errors.push(`롤 클라이언트: ${e.message}`); }
   }
   clearTimeout(t);
   if (list) {
@@ -32,7 +34,7 @@ export async function startSync({ onDone, riotId = "" } = {}) {
   }
   // S2: 상황 → 원인 → 한 번에 고치는 방법 (Riot ID 로 직접 찾기)
   sh.innerHTML = `<button class="close" aria-label="닫기" data-close>✕</button><h2>경기를 가져오지 못했어요</h2>
-    <p class="body">${esc(errors[errors.length - 1] || "")}</p>
+    <ul class="plain">${errors.map((x) => `<li class="body">${esc(x)}</li>`).join("")}</ul>
     ${key.set && !key.problem ? `<p class="sub">롤 클라이언트를 못 찾았다면 Riot ID로 직접 찾을 수 있어요. PC방이라면 LoLDosa를 관리자 권한으로 실행하면 클라이언트가 잡힐 수 있어요.</p>
       <div class="field" style="margin-top:12px"><label for="rid">내 Riot ID</label><input class="input" id="rid" placeholder="닉네임#태그"></div>`
       : `<p class="sub">롤 클라이언트를 켠 뒤 다시 눌러 주세요. PC방이라면 LoLDosa를 관리자 권한으로 실행해 보세요. 설정에서 Riot API 키를 넣으면 Riot ID로도 가져올 수 있어요.</p>`}

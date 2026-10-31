@@ -10,7 +10,7 @@ export const state = { ddragon: "", concepts: {}, aliases: [], learn: null, cham
 export async function api(path, opts = {}) {
   const r = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts });
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.detail || "잠시 뒤 다시 시도해 주세요");
+  if (!r.ok) throw new Error(data.detail || `잠시 뒤 다시 시도해 주세요 (오류 ${r.status})`);
   return data;
 }
 export const post = (path, body) => api(path, { method: "POST", body: JSON.stringify(body || {}) });
