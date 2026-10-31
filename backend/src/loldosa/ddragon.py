@@ -17,6 +17,19 @@ class Champion:
     key: str  # 영문 식별자 (e.g. "LeeSin")
     name: str  # 로케일 이름 (e.g. "리 신")
     tags: tuple[str, ...]
+    attack: int = 0  # Data Dragon info (0~10)
+    magic: int = 0
+    defense: int = 0
+
+    @property
+    def ap_share(self) -> float:
+        """마법 피해 성향 (0=AD, 1=AP). Data Dragon 의 대략적인 수치."""
+        total = self.attack + self.magic
+        return self.magic / total if total else 0.5
+
+    @property
+    def frontline(self) -> bool:
+        return "Tank" in self.tags or self.defense >= 7
 
 
 class ChampionIndex:
@@ -26,6 +39,16 @@ class ChampionIndex:
 
     def __len__(self) -> int:
         return len(self._by_id)
+
+    def all(self) -> list[Champion]:
+        return list(self._by_id.values())
+
+    def by_name(self, text: str) -> Champion | None:
+        t = text.replace(" ", "").lower()
+        for c in self._by_id.values():
+            if t in (c.key.lower(), c.name.replace(" ", "").lower()):
+                return c
+        return None
 
     def get(self, champion_id: int) -> Champion | None:
         return self._by_id.get(champion_id)
@@ -38,10 +61,13 @@ class ChampionIndex:
 
     @classmethod
     def from_ddragon_json(cls, payload: dict) -> "ChampionIndex":
-        champs = {
-            int(c["key"]): Champion(int(c["key"]), c["id"], c["name"], tuple(c.get("tags", ())))
-            for c in payload["data"].values()
-        }
+        champs = {}
+        for c in payload["data"].values():
+            info = c.get("info") or {}
+            champs[int(c["key"])] = Champion(
+                int(c["key"]), c["id"], c["name"], tuple(c.get("tags", ())),
+                info.get("attack", 0), info.get("magic", 0), info.get("defense", 0),
+            )
         return cls(payload["version"], champs)
 
 

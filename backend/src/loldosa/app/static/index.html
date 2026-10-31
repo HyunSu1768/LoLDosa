@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoLDosa · 정글 브리핑</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div class="brand">LoL<b>Dosa</b> <span>정글 브리핑</span></div>
+  <div id="stage" class="stage">대기 중</div>
+  <div id="conn" class="conn">연결 중…</div>
+</header>
+
+<main>
+  <aside id="teams">
+    <section><h3>아군</h3><ul id="allies"></ul><div class="bans" id="ally-bans"></div></section>
+    <section><h3>적군</h3><ul id="enemies"></ul><div class="bans" id="enemy-bans"></div></section>
+    <p id="scope" class="scope"></p>
+  </aside>
+
+  <section id="content">
+    <div id="idle" class="idle">
+      <h2>챔피언 선택을 기다리는 중</h2>
+      <p>롤 클라이언트에서 랭크 게임 챔피언 선택에 들어가면 자동으로 브리핑이 시작됩니다.</p>
+      <p id="status-line" class="muted"></p>
+    </div>
+
+    <div id="notes"></div>
+
+    <div id="recs" class="recs hidden">
+      <div class="rec-col"><h3>추천 픽</h3><ol id="picks"></ol></div>
+      <div class="rec-col"><h3>추천 밴</h3><ol id="bans"></ol></div>
+    </div>
+
+    <div id="ai" class="ai hidden">
+      <div class="ai-head"><span class="badge">AI 코치</span><span id="ai-headline"></span></div>
+      <ol id="ai-points"></ol>
+      <p id="ai-status" class="muted"></p>
+    </div>
+
+    <div id="cards" class="cards"></div>
+  </section>
+</main>
+
+<template id="tpl-card">
+  <article class="card">
+    <button class="card-head"><span class="card-title"></span><span class="card-headline"></span><span class="chev">▾</span></button>
+    <ul class="card-items"></ul>
+  </article>
+</template>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

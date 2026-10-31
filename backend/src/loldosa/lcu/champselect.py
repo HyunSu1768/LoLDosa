@@ -22,6 +22,7 @@ class Slot:
     intent_id: int  # 선픽 의도 (아군만)
     locked: bool
     spells: tuple[int, int] = (0, 0)
+    team_id: int = 0  # 100 블루 / 200 레드 (LCU team 1/2)
 
     @property
     def shown_champion(self) -> int:
@@ -50,6 +51,19 @@ class ChampSelectState:
     @property
     def is_jungle(self) -> bool:
         return self.my_position == "jungle"
+
+    @property
+    def my_team_id(self) -> int:
+        return self.me.team_id if self.me and self.me.team_id else 100
+
+    @property
+    def enemy_team_id(self) -> int:
+        return 300 - self.my_team_id
+
+    def picked_or_banned(self) -> set[int]:
+        out = set(self.ally_bans) | set(self.enemy_bans)
+        out |= {s.champion_id for s in self.allies + self.enemies if s.champion_id}
+        return out
 
     @property
     def ally_jungle(self) -> Slot | None:
@@ -103,6 +117,7 @@ def parse_session(session: dict) -> ChampSelectState:
             intent_id=m.get("championPickIntent", 0) or 0,
             locked=cell in locked_picks,
             spells=(m.get("spell1Id", 0) or 0, m.get("spell2Id", 0) or 0),
+            team_id={1: 100, 2: 200}.get(m.get("team", 0), 0),
         )
 
     allies = tuple(slot(m) for m in session.get("myTeam") or [])

@@ -107,6 +107,76 @@ def cmd_riot_check(_args) -> int:
     return asyncio.run(_riot_check())
 
 
+# ---- collect --------------------------------------------------------------
+
+async def _collect(args) -> int:
+    from .pipeline.collect import CollectConfig, run_collect
+    from .riot.client import RiotClient
+    from .store.matches import MatchStore
+
+    s = load_settings()
+    if not s.riot_api_key:
+        _print("RIOT_API_KEY 가 없습니다.")
+        return 1
+    store = MatchStore(s.data_dir)
+    try:
+        async with RiotClient(s.riot_api_key, s.platform, s.region) as riot:
+            for bucket in args.bucket:
+                cfg = CollectConfig(bucket=bucket, players=args.players, matches_per_player=args.per_player,
+                                    days=args.days, max_matches=args.max_matches, reseed=args.reseed)
+                counts = await run_collect(riot, store, cfg, say=_print)
+        _print("DB: " + ", ".join(f"{k}={v}" for k, v in counts.items()))
+    finally:
+        store.close()
+    return 0
+
+
+def cmd_collect(args) -> int:
+    try:
+        return asyncio.run(_collect(args))
+    except KeyboardInterrupt:
+        _print("중단됨 (다시 실행하면 이어서 진행)")
+        return 0
+
+
+# ---- analyze / update / app ------------------------------------------------
+
+def cmd_analyze(_args) -> int:
+    from .analysis.build import build_stats
+
+    s = load_settings()
+    champs = load_cached(s.data_dir, s.locale)
+    if champs is None:
+        _print("먼저 `loldosa ddragon sync` 를 실행하세요.")
+        return 1
+    if not (s.data_dir / "matches.duckdb").exists():
+        _print("수집된 경기가 없습니다. 먼저 `loldosa collect`.")
+        return 1
+    _print("통계 집계 중…")
+    counts = build_stats(s.data_dir, champs)
+    _print(f"완료 → {s.data_dir / 'stats.duckdb'}")
+    _print("  " + ", ".join(f"{k}={v}" for k, v in counts.items()))
+    return 0
+
+
+def cmd_update(args) -> int:
+    """패치/챔피언 갱신 → 수집 → 분석 (하루 한 번 돌리면 되는 전체 파이프라인)."""
+    rc = cmd_ddragon_sync(argparse.Namespace(version=None))
+    if rc == 0:
+        rc = cmd_collect(args)
+    if rc == 0:
+        rc = cmd_analyze(args)
+    return rc
+
+
+def cmd_app(args) -> int:
+    from .app.desktop import run
+
+    run(replay=Path(args.replay) if args.replay else None, port=args.port, browser=args.browser,
+        ai=not args.no_ai, replay_interval=args.interval)
+    return 0
+
+
 # ---- lcu -------------------------------------------------------------------
 
 async def _lcu_status() -> int:
@@ -246,6 +316,31 @@ def build_parser() -> argparse.ArgumentParser:
 
     riot = sub.add_parser("riot", help="Riot 웹 API").add_subparsers(dest="sub", required=True)
     riot.add_parser("check", help="API 키 동작 확인").set_defaults(func=cmd_riot_check)
+
+    def collect_args(c):
+        c.add_argument("--bucket", nargs="+", default=["apex", "platinum"], choices=["apex", "platinum"])
+        c.add_argument("--players", type=int, default=50, help="경기 목록을 스캔할 플레이어 수")
+        c.add_argument("--per-player", type=int, default=20)
+        c.add_argument("--days", type=int, default=14)
+        c.add_argument("--max-matches", type=int, default=300, help="버킷당 이번 실행 다운로드 상한")
+        c.add_argument("--reseed", action="store_true", help="리그 목록을 다시 받아 플레이어 갱신")
+
+    sub.add_parser("analyze", help="수집 데이터 → 통계 DB").set_defaults(func=cmd_analyze)
+    up = sub.add_parser("update", help="챔피언 데이터 갱신 + 수집 + 분석 한 번에")
+    collect_args(up)
+    up.set_defaults(func=cmd_update)
+
+    app = sub.add_parser("app", help="브리핑 앱 실행")
+    app.add_argument("--replay", help="녹화 파일로 데모 실행")
+    app.add_argument("--interval", type=float, default=2.0, help="재생 간격(초)")
+    app.add_argument("--browser", action="store_true", help="창 대신 브라우저로 열기")
+    app.add_argument("--port", type=int, default=8765)
+    app.add_argument("--no-ai", action="store_true", help="Claude 코칭 끄기")
+    app.set_defaults(func=cmd_app)
+
+    col = sub.add_parser("collect", help="경기·타임라인 수집 (재개 가능)")
+    collect_args(col)
+    col.set_defaults(func=cmd_collect)
 
     lcu = sub.add_parser("lcu", help="롤 클라이언트(로컬)").add_subparsers(dest="sub", required=True)
     lcu.add_parser("status", help="접속 확인").set_defaults(func=cmd_lcu_status)
