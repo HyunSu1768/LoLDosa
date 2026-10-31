@@ -67,7 +67,7 @@ jobs:
           path: |
             backend/dist/LoLDosa
             backend/dist/LoLDosa.app
-      - name: Self-update test (Windows: 옛 버전으로 표시한 복사본이 최신 Release 로 바뀌고 다시 켜지는지)
+      - name: "Self-update test (Windows — 옛 버전으로 표시한 복사본이 최신 Release 로 바뀌고 다시 켜지는지)"
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
