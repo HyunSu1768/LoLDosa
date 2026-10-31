@@ -19,7 +19,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .config import load_settings
+from .config import key_problem, load_settings
 from .ddragon import ChampionIndex, load_cached, sync_champions
 from .lcu.champselect import ChampSelectState
 
@@ -36,11 +36,13 @@ def cmd_doctor(_args) -> int:
     s = load_settings()
     ok = True
     _print(f"OS: {sys.platform}")
-    if s.riot_api_key:
-        _print(f"[ok] RIOT_API_KEY 설정됨 ({s.riot_api_key[:10]}…)  platform={s.platform} region={s.region}")
-    else:
+    _print(f".env 위치: {s.env_path} ({'있음' if s.env_path.exists() else '없음'})")
+    if problem := key_problem(s.riot_api_key):
         ok = False
-        _print("[!!] RIOT_API_KEY 없음 → 레포 루트 .env 에 추가하세요 (.env.example 참고)")
+        _print(f"[!!] {problem} → {s.env_path} 에 RIOT_API_KEY=RGAPI-… 를 넣으세요")
+    else:
+        _print(f"[ok] RIOT_API_KEY 형식 정상 ({s.riot_api_key[:10]}…{s.riot_api_key[-4:]})  "
+               f"platform={s.platform} region={s.region}  → 동작 확인: loldosa riot check")
 
     claude = shutil.which("claude")
     if claude:
@@ -74,12 +76,25 @@ def cmd_ddragon_sync(args) -> int:
 
 # ---- riot ------------------------------------------------------------------
 
+def _key_help(s, status: int) -> None:
+    _print(f"[!!] Riot 이 키를 거부했습니다 (HTTP {status}). 사용한 키: {s.riot_api_key[:10]}…{s.riot_api_key[-4:]}")
+    _print(f"     - {s.env_path} 의 RIOT_API_KEY 가 developer.riotgames.com 에 보이는 키와 같은지 확인하세요")
+    _print("     - 사이트에서 NEW API KEY 를 눌렀다면 이전 키는 즉시 무효가 됩니다")
+    _print("     - 개발용 키(DEVELOPMENT API KEY)는 24시간마다 만료됩니다")
+
+
+def _key_ok(s) -> bool:
+    if problem := key_problem(s.riot_api_key):
+        _print(f"[!!] {problem} → {s.env_path} 를 확인하세요 (`loldosa doctor`)")
+        return False
+    return True
+
+
 async def _riot_check() -> int:
     from .riot.client import RiotApiError, RiotClient
 
     s = load_settings()
-    if not s.riot_api_key:
-        _print("RIOT_API_KEY 가 없습니다.")
+    if not _key_ok(s):
         return 1
     try:
         async with RiotClient(s.riot_api_key, s.platform, s.region) as riot:
@@ -96,9 +111,10 @@ async def _riot_check() -> int:
             frames = tl["info"]["frames"]
             _print(f"[ok] 경기 {ids[0]} 타임라인: {len(frames)}프레임(분), 이벤트 {sum(len(f['events']) for f in frames)}개")
     except RiotApiError as e:
-        _print(f"[!!] {e}")
         if e.status in (401, 403):
-            _print("     키가 만료됐거나 잘못됐습니다. 개발용 키는 24시간마다 developer.riotgames.com 에서 재발급하세요.")
+            _key_help(s, e.status)
+        else:
+            _print(f"[!!] {e}")
         return 1
     return 0
 
@@ -114,9 +130,10 @@ async def _collect(args) -> int:
     from .riot.client import RiotClient
     from .store.matches import MatchStore
 
+    from .riot.client import RiotApiError
+
     s = load_settings()
-    if not s.riot_api_key:
-        _print("RIOT_API_KEY 가 없습니다.")
+    if not _key_ok(s):
         return 1
     store = MatchStore(s.data_dir)
     try:
@@ -126,6 +143,12 @@ async def _collect(args) -> int:
                                     days=args.days, max_matches=args.max_matches, reseed=args.reseed)
                 counts = await run_collect(riot, store, cfg, say=_print)
         _print("DB: " + ", ".join(f"{k}={v}" for k, v in counts.items()))
+    except RiotApiError as e:
+        if e.status in (401, 403):
+            _key_help(s, e.status)
+        else:
+            _print(f"[!!] {e}")
+        return 1
     finally:
         store.close()
     return 0
