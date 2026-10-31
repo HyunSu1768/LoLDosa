@@ -63,7 +63,12 @@ WITH start AS (
     FROM gfr f JOIN camps c ON c.team_id = f.team_id
     WHERE f.minute = 1 GROUP BY ALL
 ), at3 AS (
-    SELECT match_id, pid, rel_region(team_id, x, y) AS route3, map_side(x, y) AS side3
+    -- 정글 몬스터 CS 는 캠프당 4씩 오른다. 스커틀은 3:30 생성이라 3:00 값은 캠프 수만 반영
+    SELECT match_id, pid, rel_region(team_id, x, y) AS route3, map_side(x, y) AS side3,
+           jungle_cs // 4 AS camps3,
+           CASE WHEN jungle_cs // 4 >= 6 THEN 'full_clear'
+                WHEN jungle_cs // 4 >= 4 THEN 'partial'
+                ELSE 'three_or_less' END AS clear3
     FROM gfr WHERE minute = 3
 ), at10 AS (
     SELECT match_id, pid,
@@ -90,7 +95,7 @@ WITH start AS (
            count(*) FILTER (WHERE ts_ms < 300000 AND reg NOT IN ('top', 'mid', 'bot', 'base')) AS jungle_fights5
     FROM kills GROUP BY ALL
 )
-SELECT g.*, s.start_camp, a.route3, a.side3, t.gd5, t.gd10, t.gd15, t.xpd10,
+SELECT g.*, s.start_camp, a.route3, a.side3, a.camps3, a.clear3, t.gd5, t.gd10, t.gd15, t.xpd10,
        fg.first_gank_ms, fg.first_gank_lane, fg.first_gank_outcome,
        coalesce(ea.takedowns10, 0) AS takedowns10, coalesce(ea.deaths10, 0) AS deaths10,
        coalesce(ea.jungle_fights5, 0) AS jungle_fights5
@@ -193,8 +198,8 @@ SELECT sc.scope, sc.bucket, x.champ AS champion_id, x.team_id, x.start_camp,
 FROM gxo x JOIN sc USING (match_id) WHERE start_camp IS NOT NULL GROUP BY ALL""",
 
     "routes": """
-SELECT sc.scope, sc.bucket, x.champ AS champion_id, x.start_camp, x.route3, x.side3,
-    count(*) AS games, sum(win) AS wins, avg(gd10) AS gd10
+SELECT sc.scope, sc.bucket, x.champ AS champion_id, x.start_camp, x.route3, x.side3, x.clear3,
+    count(*) AS games, sum(win) AS wins, avg(gd10) AS gd10, avg(first_gank_ms) / 1000 AS first_gank_s
 FROM gxo x JOIN sc USING (match_id) WHERE route3 IS NOT NULL GROUP BY ALL""",
 
     "first_ganks": """

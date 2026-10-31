@@ -264,17 +264,46 @@ class BriefingEngine:
         text, eid, my_side = self._start_line(s, champ, team)
         if text:
             card.add(f"내 시작 캠프 분포: {text}", eid)
-        routes = self.stats.routes(s, champ)
-        tot = sum(r["games"] for r in routes)
+        rows = self.stats.clears(s, champ)
+        tot = sum(r["games"] for r in rows)
         if tot:
-            parts = ", ".join(f"{REGION_KO.get(r['route3'], r['route3'])} {pct(r['games'] / tot)}" for r in routes[:4])
-            e2 = self.e(f"{self.name(champ)} 3:00 위치: {parts} (n={tot})", tot)
-            card.add(f"3분 시점 위치: {parts}", e2)
-            lane = sum(r["games"] for r in routes if r["route3"] in ("top", "mid", "bot", "river")) / tot
-            style = "3캠프 후 라인·강가 개입" if lane >= 0.5 else "풀클리어·정글 유지"
-            card.headline = f"{self.name(champ)}: 고티어 기준 주로 {style} ({pct(lane)}가 3분에 라인/강가)"
+            by_clear: dict[str, int] = {}
+            for r in rows:
+                by_clear[r["clear3"]] = by_clear.get(r["clear3"], 0) + r["games"]
+            share = {k: by_clear.get(k, 0) / tot for k in CLEAR_KO}
+            parts = ", ".join(f"{CLEAR_KO[k]} {pct(v)}" for k, v in share.items())
+            e2 = self.e(f"{self.name(champ)} 3:00 시점 완료 캠프 수(정글 CS ÷ 4, 스커틀 생성 전): {parts} (n={tot})", tot)
+            card.add(f"3:00까지 클리어: {parts}", e2)
+
+            def where(kind: str) -> tuple[str, int]:
+                sub = [r for r in rows if r["clear3"] == kind]
+                n = sum(r["games"] for r in sub)
+                if not n:
+                    return "", 0
+                agg: dict[str, int] = {}
+                for r in sub:
+                    agg[r["route3"]] = agg.get(r["route3"], 0) + r["games"]
+                top = sorted(agg.items(), key=lambda kv: -kv[1])[:3]
+                return ", ".join(f"{REGION_KO.get(k, k)} {pct(v / n)}" for k, v in top), n
+
+            for kind in ("full_clear", "three_or_less"):
+                text, n = where(kind)
+                if text and n >= 5:
+                    e3 = self.e(f"{self.name(champ)} {CLEAR_KO[kind]} 그룹의 3:00 위치: {text} (n={n})", n)
+                    card.add(f"{CLEAR_KO[kind]}인 판의 3:00 위치: {text}", e3)
+
+            main_kind, main_share = max(share.items(), key=lambda kv: kv[1])
             if tot >= MIN_INFER:
-                card.add(f"고티어 {josa(self.name(champ))} 주로 '{style}' 형태로 시작합니다.", e2, kind="inference")
+                if main_kind == "full_clear" and main_share >= 0.5:
+                    card.headline = f"{self.name(champ)}: 풀클리어 중심 (3:00까지 6캠프 {pct(main_share)})"
+                    card.add(f"고티어 {josa(self.name(champ))} 대부분 3분 안에 6캠프를 다 돌고, 그 뒤 스커틀(3:30)이나 "
+                             f"라인으로 이동합니다.", e2, kind="inference")
+                elif share["three_or_less"] >= 0.35:
+                    card.headline = f"{self.name(champ)}: 3캠프 후 이른 개입 비중 높음 ({pct(share['three_or_less'])})"
+                    card.add(f"고티어 {self.name(champ)}는 3캠프 이하에서 정글을 벗어나 갱·카정을 가는 비율이 높습니다.",
+                             e2, kind="inference")
+                else:
+                    card.headline = f"{self.name(champ)}: 클리어 방식 혼합 (풀클 {pct(share['full_clear'])})"
             else:
                 card.headline = f"{self.name(champ)}: 동선 표본 부족 (n={tot})"
         if enemy_jg:
@@ -568,6 +597,8 @@ class BriefingEngine:
 
 SRC_PRO = "Leaguepedia 프로 대회 기록"
 
+
+CLEAR_KO = {"full_clear": "6캠프(풀클리어)", "partial": "4~5캠프", "three_or_less": "3캠프 이하"}
 
 PROFILE_KO = {"ad_heavy": "AD 위주", "ap_heavy": "AP 위주", "balanced": "AD/AP 균형", "unknown": "알 수 없음"}
 DUR_ORDER = ["<25", "25-30", "30-35", "35+"]

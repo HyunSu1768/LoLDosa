@@ -133,3 +133,13 @@ def test_insights_card_uses_guides(built):
     assert guide_items and "레드 시작" in guide_items[0].text
     ev = {e.id: e for e in b.evidence}
     assert ev[guide_items[0].evidence[0]].url == "https://example.com/g"
+
+
+def test_clear_classification(built):
+    d, _, _ = built
+    import duckdb
+
+    con = duckdb.connect(str(d / "stats.duckdb"), read_only=True)
+    kinds = {r[0] for r in con.execute("SELECT DISTINCT clear3 FROM routes").fetchall()}
+    con.close()
+    assert kinds and kinds <= {"full_clear", "partial", "three_or_less"}

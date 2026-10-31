@@ -159,6 +159,12 @@ class StatsDB:
         return self.rows(f"""SELECT route3, sum(games) AS games, sum(wins) AS wins FROM routes
                              WHERE {w} AND champion_id=? GROUP BY route3 ORDER BY games DESC""", p + [champ])
 
+    def clears(self, s: Scope, champ: int) -> list[dict]:
+        """3:00 까지 완료한 캠프 수 기준 클리어 방식 + 그때 위치."""
+        w, p = self._w(s)
+        return self.rows(f"""SELECT clear3, route3, sum(games) AS games, sum(wins) AS wins
+                             FROM routes WHERE {w} AND champion_id=? GROUP BY ALL""", p + [champ])
+
     def first_ganks(self, s: Scope, champ: int) -> list[dict]:
         w, p = self._w(s)
         return self.rows(f"""SELECT lane, games, wins, avg_s, median_s, kill_rate FROM first_ganks
