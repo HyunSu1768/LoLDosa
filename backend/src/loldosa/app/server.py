@@ -478,6 +478,9 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
         if len(rows) < 3:
             return {"ready": False, "reason": f"정글 판이 {len(rows)}판뿐이에요. 3판 이상 있어야 진단할 수 있어요."}
         res = personal_gap(rows, ref, "challenger", limit=3)
+        for x in res["gaps"]:
+            for e in x.get("examples", []):
+                e["champion"] = champs.name(e["champion_id"])
         # 변화: 앞쪽 절반 vs 최근 절반
         if len(rows) >= 8:
             half = len(rows) // 2

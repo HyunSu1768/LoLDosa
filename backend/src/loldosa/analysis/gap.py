@@ -320,6 +320,7 @@ def personal_gap(rows: list[dict], ref: dict, target: str = "challenger", limit:
             "platinum_text": fmt_value(f, base["median"]),
             "groups_text": {k: fmt_value(f, v["median"]) for k, v in g.items()},
             "auc": r["auc"], "short": round(short, 2), "priority": round(max(short, 0) * (r["auc"] - 0.5), 4),
+            "examples": [{**e, "value_text": fmt_value(f, e["value"])} for e in (ref.get("exemplars", {}).get(key) or [])[:3]],
             # 한 번에 챌린저까지는 무리라서, 남은 거리의 1/3씩 끊어서 '이번 주 목표'로
             "step_text": fmt_value(f, mine + (tgt["median"] - mine) / 3),
         })

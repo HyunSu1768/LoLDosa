@@ -196,11 +196,13 @@ async function loadGap() {
         <div class="gap-drill">다음 판: ${esc(x.drill)}</div>
         <div class="gap-step">이번 주 목표: <b>${esc(x.step_text)}</b> <span class="muted">(챌린저까지 남은 거리의 1/3 · 판이 쌓이면 다시 계산돼요)</span></div>
         ${x.concept === "communication-pings" ? `<div class="muted small-note">핑 횟수 자체가 목표는 아니에요. 핑을 치려면 미니맵을 보고 있어야 해서, 고수일수록 많이 치는 거예요. 의미 없는 핑 연타는 오히려 팀을 흔들어요.</div>` : ""}
+        ${x.examples && x.examples.length ? `<div class="gap-ex"><span class="muted">프로가 하는 거 보기 (롤 클라이언트에서 리플레이가 그 시점으로 열려요):</span>
+          ${x.examples.map((e) => `<button class="ghost small" onclick="openReplay('${e.match_id}', ${Math.round(e.t)})">🎬 ${esc(e.player)} · ${esc(e.champion)} · ${esc(e.value_text)}</button>`).join("")}</div>` : ""}
         <div class="row"><button class="ghost small" onclick="openConcept('${x.concept}')">개념 보기</button>
         ${CHECKABLE.has(x.concept) ? `<button class="ghost small" onclick="setFocus('${x.concept}')">연습 목표로</button>` : ""}</div></div>
       <div class="gap-power" title="고수와 플래티넘을 가르는 힘 (0.5 = 못 가름, 1 = 완벽히 가름)">가르는 힘 ${Math.round((x.auc - 0.5) * 200)}</div></div>`;
   box.innerHTML = `<div class="panel gap">
-    <div class="gap-head"><h3 class="sec">챌린저까지 가장 큰 차이 <span class="muted">내 최근 정글 ${g.games}판 · 프로·챌린저·마스터+ ${(g.groups.pro || 0) + (g.groups.challenger || 0) + (g.groups.apex || 0)}판과 플래티넘 ${g.groups.platinum}판을 실제로 비교해 찾은 지표만 써요</span></h3>
+    <div class="gap-head"><h3 class="sec">챌린저까지 가장 큰 차이 <span class="muted">내 최근 정글 ${g.games}판 · 프로·챌린저·마스터+ ${(g.groups.pro || 0) + (g.groups.challenger || 0) + (g.groups.apex || 0)}판과 플래티넘 ${g.groups.platinum}판을 실제로 비교해 찾은 지표만 써요 · 내 값은 챔피언 차이를 보정한 중앙값</span></h3>
       <div class="gap-score"><div class="big">${g.progress}<small>점</small></div><div class="muted">플래티넘 0 · 챌린저 100${trend}</div>${bar(g.progress)}</div></div>
     ${g.gaps.length ? g.gaps.map(item).join("") : `<p>검증된 지표에서 챌린저 중앙값과 큰 차이가 없어요. 👍</p>`}
     ${g.by_champion && g.by_champion.length > 1 ? `<div class="gap-champs"><span class="muted">챔피언별 진행도 (3판 이상):</span> ${g.by_champion.map((c) =>

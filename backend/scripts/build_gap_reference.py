@@ -23,6 +23,39 @@ def load(raw: Path, mid: str):
     return d["match"], d["timeline"]
 
 
+# 지표마다 리플레이에서 볼 시점 (초). 값 자체가 시각인 지표는 그 직전으로.
+WATCH_AT = {"jcs10": 55, "cs15": 55, "first_recall": None, "lv6_time": None, "kp": 240, "dead_pct": 240,
+            "vision_pm": 480, "ward_kills_pm": 480, "pings_pm": 150, "missing_pings": 150, "omw_pings": 150,
+            "getback_pings": 150, "vision_pings": 300}
+
+
+def exemplars(rows, ref, names, per=4):
+    """프로 경기 중 그 지표를 가장 잘한 판 (선수 중복 없이). 같은 패치 동안 클라이언트에서 리플레이로 볼 수 있다."""
+    out = {}
+    for key, r in ref["features"].items():
+        if not r["validated"]:
+            continue
+        # 극단값(예: 1:50 상점 구매, 핑 40번)은 따라 할 본보기가 아니라서, 프로 중앙값~상위 25% 사이의 이긴 판을 먼저 고른다
+        g = r["groups"].get("pro") or {}
+        lo, hi = sorted([g.get("median", 0), g.get("p75" if r["higher_better"] else "p25", 0)])
+        cand = sorted((x for x in rows if x.get(key) is not None),
+                      key=lambda x: (not (lo <= x[key] <= hi), not x["win"], abs(x[key] - g.get("median", 0))))
+        picked, players = [], set()
+        for x in cand:
+            who = names.get(x["puuid"], "프로")
+            if who in players:
+                continue
+            players.add(who)
+            t = WATCH_AT.get(key)
+            t = max(0, x[key] - 20) if t is None else t
+            picked.append({"match_id": x["match_id"], "player": who, "champion_id": x["champion_id"],
+                           "value": x[key], "t": t, "win": x["win"]})
+            if len(picked) >= per:
+                break
+        out[key] = picked
+    return out
+
+
 def main():
     raw, out = Path(sys.argv[1]), Path(sys.argv[2])
     groups, seen = {}, set()
@@ -44,11 +77,18 @@ def main():
             f = jungler_features(d[0], d[1], pu)
             if f:
                 seen.add((pu, mid))
+                f["match_id"], f["puuid"] = mid, pu
                 rows.append(f)
         groups.setdefault(name, []).extend(rows)
         print(name, len(rows), flush=True)
     high = tuple(g for g in ("pro", "challenger", "apex") if g in groups)
     ref = build_reference(groups, high, "platinum")
+    names = {}
+    acc = Path(__file__).resolve().parents[2] / "research_notes" / "검증" / "pro_accounts.json"
+    if acc.exists():
+        names = {a["puuid"]: a["player"] for a in json.loads(acc.read_text()) if a.get("puuid")}
+    if "pro" in groups:
+        ref["exemplars"] = exemplars(groups["pro"], ref, names)
     out.write_text(json.dumps(ref, ensure_ascii=False, indent=1), encoding="utf-8")
     for k, v in sorted(ref["features"].items(), key=lambda kv: -kv[1]["auc"]):
         g = v["groups"]
