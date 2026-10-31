@@ -188,6 +188,14 @@ async function loadGap() {
     return;
   }
   const bar = (p) => `<div class="gap-bar"><div style="width:${Math.max(0, Math.min(100, p))}%"></div><span class="tick plat">플래티넘</span><span class="tick chal">챌린저</span></div>`;
+  const series = (g.series || []).map((x) => x.progress).filter((v) => v != null);
+  const spark = series.length >= 2 ? (() => {
+    const W = 240, H = 46, lo = Math.min(0, ...series), hi = Math.max(100, ...series);
+    const pts = series.map((v, i) => `${(i / (series.length - 1)) * W},${H - ((v - lo) / (hi - lo)) * H}`).join(" ");
+    const y100 = H - ((100 - lo) / (hi - lo)) * H;
+    return `<svg class="spark" viewBox="0 0 ${W} ${H + 2}" width="${W}" height="${H + 2}"><line x1="0" x2="${W}" y1="${y100}" y2="${y100}" class="ref"/>
+      <polyline points="${pts}" fill="none"/></svg><div class="muted">최근 5판씩 묶은 진행도 흐름 (점선 = 챌린저)</div>`;
+  })() : "";
   const trend = g.progress_before != null ? ` <span class="muted">(앞쪽 판 ${g.progress_before}점 → 최근 ${g.progress_now}점)</span>` : "";
   const item = (x, i) => `<div class="gap-item">
       <div class="gap-rank">${i + 1}</div>
@@ -203,7 +211,7 @@ async function loadGap() {
       <div class="gap-power" title="고수와 플래티넘을 가르는 힘 (0.5 = 못 가름, 1 = 완벽히 가름)">가르는 힘 ${Math.round((x.auc - 0.5) * 200)}</div></div>`;
   box.innerHTML = `<div class="panel gap">
     <div class="gap-head"><h3 class="sec">챌린저까지 가장 큰 차이 <span class="muted">내 최근 정글 ${g.games}판 · 프로·챌린저·마스터+ ${(g.groups.pro || 0) + (g.groups.challenger || 0) + (g.groups.apex || 0)}판과 플래티넘 ${g.groups.platinum}판을 실제로 비교해 찾은 지표만 써요 · 내 값은 챔피언 차이를 보정한 중앙값</span></h3>
-      <div class="gap-score"><div class="big">${g.progress}<small>점</small></div><div class="muted">플래티넘 0 · 챌린저 100${trend}</div>${bar(g.progress)}</div></div>
+      <div class="gap-score"><div class="big">${g.progress}<small>점</small></div><div class="muted">플래티넘 0 · 챌린저 100${trend}</div>${bar(g.progress)}${spark}</div></div>
     ${g.gaps.length ? g.gaps.map(item).join("") : `<p>검증된 지표에서 챌린저 중앙값과 큰 차이가 없어요. 👍</p>`}
     ${g.by_champion && g.by_champion.length > 1 ? `<div class="gap-champs"><span class="muted">챔피언별 진행도 (3판 이상):</span> ${g.by_champion.map((c) =>
       `<span class="gap-champ">${imgTag(c.key)} ${esc(c.name)} <b>${c.progress}점</b> <span class="muted">${c.wins}승 ${c.games - c.wins}패</span></span>`).join("")}

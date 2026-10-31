@@ -490,6 +490,10 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
             for x in res["gaps"] + res["strengths"]:
                 b = before.get(x["key"])
                 x["before_text"] = b["mine_text"] if b else None
+        # 흐름: 최근 5판씩 묶은 진행도 (오래된 판 → 최근 판)
+        res["series"] = [{"progress": personal_gap(rows[max(0, i - 4): i + 1], ref, "challenger", 1)["progress"],
+                          "match_id": rows[i]["match_id"], "game_start": rows[i]["game_start"]}
+                         for i in range(2, len(rows))]
         # 챔피언별: 같은 지표로 챔피언마다 진행도 (3판 이상)
         by: dict[int, list] = {}
         for r in rows:
