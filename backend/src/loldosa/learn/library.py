@@ -1,7 +1,7 @@
 """개념 학습 라이브러리: learn/concepts.json (리서치 결과) + data/learn_progress.json (내 진도).
 
 브리핑 플랜 줄과 리뷰 피드백은 관련 개념 id 를 달고 있어서, 화면에서 바로 개념으로 이동할 수 있다.
-리뷰에서 지적된 개념은 진도 파일의 flags 에 쌓여 '추천 학습'이 된다.
+리뷰에서 지적된 개념은 진도 파일의 flags 에 쌓여 '다시 볼 개념'이 된다.
 """
 
 from __future__ import annotations
