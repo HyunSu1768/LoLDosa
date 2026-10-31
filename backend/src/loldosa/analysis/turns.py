@@ -59,7 +59,7 @@ def shop_visits(purchases: list[tuple[int, int]], deaths: list[tuple[int, int]])
 
 
 TURN_KO = {"sync": "정글+라이너 같이 미리 귀환", "jg_only": "정글만 미리 귀환", "none": "미리 귀환 안 함",
-           "late": "직전 30초 안에 정글이 상점"}
+           "late": "직전 30초 안에 정글이 귀환"}
 OBJ_KO = {"DRAGON": "첫 드래곤", "HORDE": "공허 유충"}
 
 

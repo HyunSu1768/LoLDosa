@@ -1,7 +1,7 @@
 /* LoLDosa — 학습 루프: 연습 목표 → 게임 전 브리핑 → 경기 복기(목표 체크) → 개념 학습 → 다음 목표 */
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const STAGE_KO = { planning: "선픽 의도 표시", banning: "밴 단계", pre_my_pick: "내 픽 전", post_my_pick: "내 픽 확정", final: "전원 확정" };
+const STAGE_KO = { planning: "픽 미리 찍기", banning: "밴 단계", pre_my_pick: "내 픽 전", post_my_pick: "내 픽 확정", final: "전원 확정" };
 const LEVEL_KO = { basic: "기초", intermediate: "중급", advanced: "심화" };
 const POS = { TOP: "탑", JUNGLE: "정글", MIDDLE: "미드", BOTTOM: "원딜", UTILITY: "서폿" };
 let ddragon = "";
@@ -127,8 +127,8 @@ async function loadHome() {
       ${f.how && f.how.length ? `<ol class="how">${f.how.map((x) => `<li>${linkify(x)}</li>`).join("")}</ol>` : ""}
       <div class="trend"><span class="muted">최근 경기 (왼쪽이 오래된 경기)</span>
         <div>${hist.length ? dotsHtml(hist) : '<span class="muted">아직 기록이 없어요. 게임을 하고 \'경기 복기\'에서 불러오세요.</span>'}</div>
-        ${hist.length ? `<div class="rate">${hist.length}경기 중 <b>${passN}</b>번 달성</div>` : ""}</div>
-      <div class="row"><button class="primary" onclick="openConcept('${f.id}')">개념 다시 보기</button>
+        ${hist.length ? `<div class="rate">최근 ${hist.length}판 중 <b>${passN}</b>번 지킴</div>` : ""}</div>
+      <div class="row"><button class="primary" onclick="openConcept('${f.id}')">설명 다시 보기</button>
         <button class="ghost" onclick="pickFocus()">목표 바꾸기</button></div>
     </div>` : `<div class="focus-card empty-focus"><h2>연습 목표를 하나 정해 보세요</h2>
       <p>한 번에 하나만 연습하는 게 가장 빨라요. 목표를 정하면 게임 전 브리핑 맨 위에 나오고, 경기 후 복기에서 지켰는지 체크해요.</p>
@@ -138,13 +138,13 @@ async function loadHome() {
     return `<div class="skill" onclick="openConcept('${s.id}')">
       <div class="skill-top"><b>${esc(s.title)}</b>${f && s.id === f.id ? '<span class="pill on">연습 중</span>' : ""}</div>
       <div class="bar"><i style="width:${rate == null ? 0 : Math.max(4, Math.round(rate * 100))}%" class="${rate == null ? "" : rate >= 0.7 ? "good" : rate >= 0.4 ? "mid" : "bad"}"></i></div>
-      <div class="muted">${rate == null ? "아직 측정 전" : `최근 ${s.total}경기 중 ${s.pass}번 달성`}</div></div>`;
+      <div class="muted">${rate == null ? "아직 기록 없음" : `최근 ${s.total}판 중 ${s.pass}번 지킴`}</div></div>`;
   }).join("");
   const todo = [];
   if (!h.stats_ready) todo.push("터미널에서 <code>uv run loldosa update</code> 로 고티어 데이터를 먼저 모으세요.");
   if (!h.riot_id) todo.push(`<a href="#" onclick="showTab('settings');return false">설정</a>에서 Riot ID를 입력하세요.`);
-  if (h.riot_id && !h.games_tracked) todo.push(`<a href="#" onclick="showTab('review');return false">경기 복기</a>에서 최근 경기를 불러오면 실력 지도가 채워져요.`);
-  if (h.suggest && (!f || h.suggest.id !== f.id)) todo.push(`가장 약한 부분은 <b>${esc(h.suggest.title)}</b>이에요 (최근 ${h.suggest.total}경기 중 ${h.suggest.pass}번 달성). <a href="#" onclick="setFocus('${h.suggest.id}');return false">이걸 목표로 하기</a>`);
+  if (h.riot_id && !h.games_tracked) todo.push(`<a href="#" onclick="showTab('review');return false">경기 복기</a>에서 최근 경기를 불러오면 개념별 달성률이 채워져요.`);
+  if (h.suggest && (!f || h.suggest.id !== f.id)) todo.push(`가장 약한 부분은 <b>${esc(h.suggest.title)}</b>이에요 (최근 ${h.suggest.total}판 중 ${h.suggest.pass}번 지킴). <a href="#" onclick="setFocus('${h.suggest.id}');return false">이걸 목표로 하기</a>`);
   $("home").innerHTML = `
     <div class="home-grid">
       <div>${focusCard}
@@ -154,9 +154,9 @@ async function loadHome() {
           <li>게임이 끝나면 <b>경기 복기</b>에서 목표를 지켰는지 확인해요</li><li>못 지켰다면 <b>개념 학습</b>에서 다시 보고 퀴즈로 확인해요</li></ol></div>
       </div>
       <div>
-        <div class="panel"><h3 class="sec">내 실력 지도 <span class="muted">경기 기록으로 잰 개념별 달성률 · 누르면 개념으로</span></h3><div class="skills">${skills}</div></div>
+        <div class="panel"><h3 class="sec">내 개념별 달성률 <span class="muted">경기 기록 기준 · 누르면 설명 보기</span></h3><div class="skills">${skills}</div></div>
         ${h.recommended.length ? `<div class="panel"><h3 class="sec">복기에서 자주 지적된 개념</h3>${h.recommended.map((r) =>
-          `<button class="chip-link" onclick="openConcept('${r.id}')">📘 ${esc(r.title)} · ${r.count}경기</button>`).join("")}</div>` : ""}
+          `<button class="chip-link" onclick="openConcept('${r.id}')">📘 ${esc(r.title)} · ${r.count}판</button>`).join("")}</div>` : ""}
       </div>
     </div>`;
 }
@@ -172,11 +172,11 @@ async function pickFocus() {
   const h = await api("/api/home");
   const rows = h.skills.map((s) => {
     const c = concepts[s.id] || {};
-    const rate = s.total ? `최근 ${s.total}경기 중 ${s.pass}번 달성` : "아직 측정 전";
+    const rate = s.total ? `최근 ${s.total}판 중 ${s.pass}번 지킴` : "아직 기록 없음";
     return `<div class="pick-focus" onclick="setFocus('${s.id}')"><b>${esc(s.title)}</b>
       <div class="muted">🎯 ${esc(s.goal)} · ${rate}</div><div>${esc(c.summary || "")}</div></div>`;
   }).join("");
-  openModal(`<h2>연습 목표 고르기</h2><p class="muted">경기 기록으로 지켰는지 잴 수 있는 개념만 고를 수 있어요. 약한 것부터 위에 있어요.</p>${rows}`);
+  openModal(`<h2>연습 목표 고르기</h2><p class="muted">경기 기록으로 지켰는지 체크할 수 있는 개념만 고를 수 있어요. 약한 것부터 위에 있어요.</p>${rows}`);
 }
 window.pickFocus = pickFocus;
 
@@ -264,7 +264,7 @@ function onBriefing(msg) {
   renderTeams(st);
   const show = b.picks.length || b.bans.length;
   $("picks-box").classList.toggle("hidden", !show);
-  $("picks").innerHTML = b.picks.map((r) => pickCard(r)).join("") || `<span class="muted">추천할 후보가 없습니다</span>`;
+  $("picks").innerHTML = b.picks.map((r) => pickCard(r)).join("") || `<span class="muted">추천할 챔피언이 없어요</span>`;
   $("picks-outside-wrap").classList.toggle("hidden", !b.picks_outside.length);
   $("picks-outside").innerHTML = b.picks_outside.map((r) => pickCard(r)).join("");
   $("bans-wrap").classList.toggle("hidden", !b.bans.length);
@@ -282,8 +282,8 @@ function onBriefing(msg) {
 function renderAI(msg) {
   $("ai").classList.remove("hidden");
   $("ai-status").textContent = "";
-  if (msg.status === "running") { $("ai-headline").textContent = "근거를 바탕으로 정리 중… (10~20초)"; $("ai-points").innerHTML = ""; return; }
-  if (msg.status !== "ok") { $("ai-headline").textContent = "AI 코치를 사용할 수 없습니다"; $("ai-points").innerHTML = ""; $("ai-status").textContent = msg.message || ""; return; }
+  if (msg.status === "running") { $("ai-headline").textContent = "근거 보고 정리하는 중… (10~20초)"; $("ai-points").innerHTML = ""; return; }
+  if (msg.status !== "ok") { $("ai-headline").textContent = "AI 코치를 쓸 수 없어요"; $("ai-points").innerHTML = ""; $("ai-status").textContent = msg.message || ""; return; }
   $("ai-headline").innerHTML = linkify(msg.headline);
   $("ai-points").innerHTML = msg.points.map((p) => `<li><span class="phase">${esc(p.phase)}</span>${linkify(p.text)}${evChips(p.evidence)}</li>`).join("");
 }
@@ -294,7 +294,7 @@ async function loadStatus() {
     ddragon = s.ddragon || ddragon;
     $("pill-lcu").textContent = s.replay ? "데모 재생" : s.lcu ? "클라이언트 연결" : "클라이언트 꺼짐";
     $("pill-lcu").className = `pill ${s.lcu ? "on" : "off"}`;
-    $("status-line").textContent = s.stats && s.stats.built_at ? `고티어 데이터 갱신 ${s.stats.built_at.replace("T", " ").slice(0, 16)}` : "고티어 데이터 없음 → loldosa update";
+    $("status-line").textContent = s.stats && s.stats.built_at ? `고티어 데이터 업데이트 ${s.stats.built_at.replace("T", " ").slice(0, 16)}` : "고티어 데이터 없음 → loldosa update";
   } catch (e) { /* 재시작 중 */ }
 }
 let currentFocus = null;
@@ -337,7 +337,7 @@ function renderMatchList(list) {
       ${imgTag(champKey(m.champion_id))}
       <div><div class="m1">${esc(champName(m.champion_id))} <span class="muted">${esc(POS[m.position] || m.position)}</span></div>
       <div class="m2">${m.kills}/${m.deaths}/${m.assists} · ${String(m.game_start).slice(5, 16).replace("T", " ")}</div>
-      ${m.focus_status && m.focus_status !== "na" ? `<div class="m2 ${m.focus_status}">연습 목표 ${m.focus_status === "pass" ? "달성 ✓" : "미달 ✗"}</div>` : ""}</div>
+      ${m.focus_status && m.focus_status !== "na" ? `<div class="m2 ${m.focus_status}">연습 목표 ${m.focus_status === "pass" ? "지킴 ✓" : "못 지킴 ✗"}</div>` : ""}</div>
       <span class="res">${m.win ? "승" : "패"}</span></li>`).join("") || `<li class="muted" style="padding:12px">불러온 경기가 없어요. 위에 Riot ID를 넣고 '경기 불러오기'를 누르세요.</li>`;
   document.querySelectorAll(".match").forEach((li) => (li.onclick = () => openReview(li.dataset.id)));
 }
@@ -350,12 +350,12 @@ async function loadMatches() {
 $("review-sync").onclick = async () => {
   const btn = $("review-sync");
   btn.disabled = true;
-  $("review-status").textContent = "경기를 받고 분석하는 중… (경기당 2~3초)";
+  $("review-status").textContent = "경기 불러와서 분석 중… (한 판에 2~3초)";
   try {
     await ensureChamps();
     const list = await api("/api/review/sync", { method: "POST", body: JSON.stringify({ riot_id: $("riot-id").value, count: +$("review-count").value }) });
     renderMatchList(list);
-    $("review-status").textContent = `${list.length}경기 · 홈의 실력 지도가 갱신됐어요`;
+    $("review-status").textContent = `${list.length}경기 · 홈의 개념별 달성률이 업데이트됐어요`;
     if (list.length && !currentMatch) openReview(list[0].match_id);
   } catch (e) { $("review-status").textContent = e.message; } finally { btn.disabled = false; }
 };
@@ -371,7 +371,7 @@ function minimap(rv) {
   }).join("");
   return `<div class="minimap"><img src="https://ddragon.leagueoflegends.com/cdn/${ddragon}/img/map/map11.png" alt="" onerror="this.remove()">
     <svg viewBox="0 0 ${S} ${S}">${path(rv.paths.enemy_jungler, "#ff5f66")}${path(rv.paths.me, "#f0d79a")}${marks}</svg></div>
-    <div class="legend"><span><i style="background:#f0d79a"></i>나 (숫자=분)</span><span><i style="background:#ff5f66"></i>적 정글</span><span style="color:#ff5f66">✕ 데스·적 갱</span><span style="color:#ffb547">◆ 적 오브젝트</span><span style="color:#3ccf91">◆ 우리 오브젝트</span></div>`;
+    <div class="legend"><span><i style="background:#f0d79a"></i>나 (숫자=분)</span><span><i style="background:#ff5f66"></i>상대 정글</span><span style="color:#ff5f66">✕ 데스·상대 갱</span><span style="color:#ffb547">◆ 상대 오브젝트</span><span style="color:#3ccf91">◆ 우리 오브젝트</span></div>`;
 }
 
 async function openReview(id) {
@@ -394,7 +394,7 @@ async function openReview(id) {
           <div class="row"><button class="primary" onclick="openConcept('${kl.concept.id}')">개념 배우기</button>
           ${rv.checks.some((c) => c.concept === kl.concept.id) && !(focus && focus.concept === kl.concept.id) ? `<button class="ghost" onclick="setFocusFromReview('${kl.concept.id}')">다음 판 연습 목표로</button>` : ""}</div></div>
       </div>` : (rv.is_jungle ? `<div class="key-lesson good"><h2>눈에 띄는 큰 실수가 없었어요 👍</h2><p>아래 체크에서 지킨 것과 놓친 것을 확인해 보세요.</p></div>` : "");
-    const checks = rv.checks.length ? `<h3 class="sec">개념 체크 <span class="muted">경기 기록으로 측정 · 누르면 개념으로</span></h3><div class="checks">${rv.checks.filter((c) => c.status !== "na").map((c) =>
+    const checks = rv.checks.length ? `<h3 class="sec">목표 체크 <span class="muted">경기 기록으로 체크 · 누르면 설명 보기</span></h3><div class="checks">${rv.checks.filter((c) => c.status !== "na").map((c) =>
       `<div class="check ${c.status} ${c.focus ? "focus" : ""}" onclick="openConcept('${c.concept}')"><span class="ic">${c.status === "pass" ? "✓" : "✗"}</span>
         <div><b>${esc(c.title)}</b>${c.focus ? ' <span class="pill on">연습 목표</span>' : ""}<div class="muted">${esc(c.value)}</div></div></div>`).join("")}</div>` : "";
     const others = rv.lessons.filter((l) => !kl || l.title !== kl.lesson.title).slice(0, 4).map((l) => `<div class="lesson sev${Math.min(l.severity, 3)}"><h4>${esc(l.title)}</h4>
@@ -406,7 +406,7 @@ async function openReview(id) {
       <div class="rv-head">${imgTag(sm.key)}<div>
         <h2>${esc(sm.champion)} <span class="${sm.win ? "res-win" : "res-loss"}">${sm.win ? "승리" : "패배"}</span></h2>
         <div class="muted">${esc(sm.position)} · ${esc(sm.side)} · ${esc(sm.kda)} · ${esc(sm.duration)} · ${esc(sm.date)}${sm.enemy_jungler ? ` · 상대 정글 ${esc(sm.enemy_jungler)}` : ""}</div></div>
-        ${focus && focus.status !== "na" ? `<div class="focus-result ${focus.status}">연습 목표 <b>${esc(focus.title)}</b><br>${focus.status === "pass" ? "달성 ✓" : "미달 ✗"} · ${esc(focus.value)}</div>` : ""}</div>
+        ${focus && focus.status !== "na" ? `<div class="focus-result ${focus.status}">연습 목표 <b>${esc(focus.title)}</b><br>${focus.status === "pass" ? "지킴 ✓" : "못 지킴 ✗"} · ${esc(focus.value)}</div>` : ""}</div>
       ${rv.notes.map((n) => `<div class="note">${linkify(n)}</div>`).join("")}
       ${keyCard}
       ${checks}
@@ -424,7 +424,7 @@ async function openReview(id) {
         const r = await api(`/api/review/${id}/ai`, { method: "POST" });
         $("rv-ai").innerHTML = r.status === "ok" ? `<div class="ai"><div class="ai-head"><span class="badge">AI 복기</span>${linkify(r.headline)}</div>
           <ol>${r.points.map((p) => `<li><span class="phase">${esc(p.phase)}</span>${linkify(p.text)}${evChips(p.evidence, pool)}</li>`).join("")}</ol></div>`
-          : `<p class="muted">${esc(r.message || "AI 코치를 사용할 수 없습니다")}</p>`;
+          : `<p class="muted">${esc(r.message || "AI 코치를 쓸 수 없어요")}</p>`;
       } catch (e) { $("rv-ai").innerHTML = `<p class="muted">${esc(e.message)}</p>`; }
     };
   } catch (e) { box.innerHTML = `<p class="muted">${esc(e.message)}</p>`; }
@@ -441,8 +441,8 @@ async function loadLearn(force = true) {
   const idx = await ensureLearn(force);
   const q = $("learn-search").value.trim().replace(/\s/g, "").toLowerCase();
   const match = (c) => !q || [c.title, c.en, c.summary, c.id, ...(c.aliases || [])].join(" ").replace(/\s/g, "").toLowerCase().includes(q);
-  $("learn-reco").innerHTML = idx.recommended.length ? `<div class="reco"><h4>추천 학습 · 복기에서 지적됨</h4>
-      ${idx.recommended.map((r) => `<div class="learn-item" onclick="openConcept('${r.id}')">${esc(r.title)}<span class="lv">${r.count}경기</span></div>`).join("")}</div>` : "";
+  $("learn-reco").innerHTML = idx.recommended.length ? `<div class="reco"><h4>다시 볼 개념 · 복기에서 지적됨</h4>
+      ${idx.recommended.map((r) => `<div class="learn-item" onclick="openConcept('${r.id}')">${esc(r.title)}<span class="lv">${r.count}판</span></div>`).join("")}</div>` : "";
   $("learn-list").innerHTML = idx.categories.map((cat) => {
     const items = idx.concepts.filter((c) => c.category === cat.id && match(c));
     if (!items.length) return "";
@@ -450,9 +450,9 @@ async function loadLearn(force = true) {
       const qz = idx.quiz[c.id];
       const dot = qz && qz.total && qz.correct / qz.total >= 0.8 ? "done" : idx.read[c.id] ? "read" : "";
       return `<div class="learn-item" data-id="${c.id}" onclick="openConcept('${c.id}')"><span class="dot ${dot}"></span>${esc(c.title)}
-        ${c.measurable ? '<span class="lv" title="경기 기록으로 측정 가능">🎯</span>' : `<span class="lv">${esc(LEVEL_KO[c.level] || "")}</span>`}</div>`;
+        ${c.measurable ? '<span class="lv" title="경기 기록으로 체크 가능">🎯</span>' : `<span class="lv">${esc(LEVEL_KO[c.level] || "")}</span>`}</div>`;
     }).join("");
-  }).join("") || `<p class="muted">개념 데이터가 없습니다.</p>`;
+  }).join("") || `<p class="muted">개념 데이터가 없어요.</p>`;
 }
 $("learn-search").oninput = () => loadLearn(false);
 
@@ -477,11 +477,11 @@ async function openConcept(id) {
       ${q.choices.map((ch, ci) => `<button class="choice" data-c="${ci}">${esc(ch)}</button>`).join("")}
       <div class="explain hidden">${esc(q.explain || "")}</div></div>`).join("");
   const hist = (c.history || []).length ? `<div class="trend"><span class="muted">내 최근 경기</span><div>${dotsHtml(c.history)}</div></div>` : "";
-  const goalBox = c.goal ? `<div class="goal-box"><div>🎯 <b>경기에서 이렇게 측정해요</b>: ${esc(c.goal)}</div>${hist}
+  const goalBox = c.goal ? `<div class="goal-box"><div>🎯 <b>경기에서 이렇게 체크해요</b>: ${esc(c.goal)}</div>${hist}
       ${c.is_focus ? '<span class="pill on">지금 연습 중</span>' : `<button class="primary" onclick="setFocus('${c.id}').then(() => openConcept('${c.id}'))">이걸 연습 목표로</button>`}</div>` : "";
   const cat = (learnIndex.categories.find((x) => x.id === c.category) || {}).name || "";
   $("learn-detail").innerHTML = `
-    <div class="crumb">${esc(cat)} · ${esc(LEVEL_KO[c.level] || "")}${c.flagged ? ` · 내 복기에서 ${c.flagged}경기 지적됨` : ""}</div>
+    <div class="crumb">${esc(cat)} · ${esc(LEVEL_KO[c.level] || "")}${c.flagged ? ` · 내 복기에서 ${c.flagged}판 지적됨` : ""}</div>
     <h1>${esc(c.title)}<span class="en">${esc(c.en || "")}</span></h1>
     <div class="summary">${esc(c.summary || "")}</div>
     ${goalBox}
@@ -539,7 +539,7 @@ $("champ-search").oninput = renderChampGrid;
 $("save-settings").onclick = async () => {
   try {
     await api("/api/settings", { method: "PUT", body: JSON.stringify({ riot_id: $("set-riot-id").value.trim(), my_bucket: $("set-bucket").value, ai_enabled: $("set-ai").checked, champion_pool: [...pool] }) });
-    $("settings-status").textContent = "저장했어요. 다음 챔피언 선택부터 적용됩니다.";
+    $("settings-status").textContent = "저장했어요. 다음 챔피언 선택부터 적용돼요.";
     $("riot-id").value = $("set-riot-id").value.trim();
   } catch (e) { $("settings-status").textContent = e.message; }
 };

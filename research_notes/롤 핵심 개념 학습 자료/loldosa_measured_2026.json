@@ -1,0 +1,276 @@
+{
+ "dataset": {
+  "matches": 599,
+  "patches": "16.21,16.20",
+  "from": "2026-10-17 07:10:32.965",
+  "to": "2026-10-31 02:44:51.393",
+  "note": "LoLDosa 수집: KR 솔로랭크 마스터 이상, Riot Match-V5 타임라인 (게임 버전 16.20~16.21 = 2026 패치 26.20~26.21)"
+ },
+ "first_dragon_kill_s_p10_p25_p50_p75": [
+  362,
+  392,
+  500,
+  624
+ ],
+ "first_horde_kill_s_p10_p25_p50_p75": [
+  492,
+  497,
+  510,
+  540
+ ],
+ "first_riftherald_kill_s_p10_p25_p50_p75": [
+  926,
+  941,
+  969,
+  1026
+ ],
+ "first_baron_nashor_kill_s_p10_p25_p50_p75": [
+  1242,
+  1272,
+  1323,
+  1412
+ ],
+ "earliest_kill_s": {
+  "DRAGON": 322.818,
+  "HORDE": 485.382,
+  "RIFTHERALD": 914.621,
+  "BARON_NASHOR": 1210.42
+ },
+ "grubs_per_match_taken_dist": [
+  [
+   3,
+   599
+  ]
+ ],
+ "latest_grub_kill_s": 866.288,
+ "jungler_camps_done_by_minute(cs//4)": {
+  "1": {
+   "0": 1198
+  },
+  "2": {
+   "0": 12,
+   "1": 62,
+   "2": 228,
+   "3": 887
+  },
+  "3": {
+   "2": 19,
+   "3": 149,
+   "4": 248,
+   "5": 246,
+   "6": 510,
+   "7": 23
+  },
+  "4": {
+   "3": 11,
+   "4": 50,
+   "5": 137,
+   "6": 259,
+   "7": 496,
+   "8": 223,
+   "9": 20
+  }
+ },
+ "jungler_level_at_minute_median": {
+  "2": 3.0,
+  "3": 3.0,
+  "4": 4.0,
+  "6": 5.0
+ },
+ "jungler_level_dist_at_3min": [
+  [
+   2,
+   13
+  ],
+  [
+   3,
+   609
+  ],
+  [
+   4,
+   576
+  ]
+ ],
+ "first_recall_s_p25_p50_p75_by_role": {
+  "JUNGLE": [
+   144,
+   220,
+   303
+  ],
+  "TOP": [
+   177,
+   233,
+   341
+  ],
+  "MIDDLE": [
+   172,
+   209,
+   297
+  ],
+  "BOTTOM": [
+   182,
+   244,
+   348
+  ],
+  "UTILITY": [
+   186,
+   250,
+   377
+  ]
+ },
+ "turn_objective_dragon": [
+  [
+   "late",
+   152,
+   4
+  ],
+  [
+   "none",
+   520,
+   270
+  ],
+  [
+   "jg_only",
+   193,
+   118
+  ],
+  [
+   "sync",
+   327,
+   204
+  ]
+ ],
+ "objective_impact_winrate": [
+  [
+   "grubs_majority",
+   599,
+   0.563
+  ],
+  [
+   "herald",
+   525,
+   0.632
+  ],
+  [
+   "first_grub",
+   599,
+   0.546
+  ],
+  [
+   "first_dragon",
+   596,
+   0.648
+  ],
+  [
+   "first_baron",
+   408,
+   0.787
+  ]
+ ],
+ "side_transition": [
+  [
+   "top",
+   "bot",
+   "top",
+   496
+  ],
+  [
+   "bot",
+   "top",
+   "bot",
+   291
+  ],
+  [
+   "top",
+   "bot",
+   "bot",
+   109
+  ],
+  [
+   "bot",
+   "top",
+   "top",
+   86
+  ],
+  [
+   "top",
+   "top",
+   "top",
+   67
+  ],
+  [
+   "bot",
+   "bot",
+   "top",
+   50
+  ],
+  [
+   "bot",
+   "bot",
+   "bot",
+   50
+  ],
+  [
+   "top",
+   "top",
+   "bot",
+   49
+  ]
+ ],
+ "first_gank_kill_median_s_by_lane": [
+  [
+   "bot",
+   461,
+   231.0
+  ],
+  [
+   "mid",
+   241,
+   226.0
+  ],
+  [
+   "top",
+   265,
+   232.0
+  ]
+ ],
+ "plates_destroyed_after_14min": [
+  19678,
+  28950
+ ],
+ "first_kill_s_p50": 129.923,
+ "game_length_min_p25_p50_p75": [
+  21.3,
+  25.2,
+  29.7
+ ],
+ "dragon_types_first": [
+  [
+   "EARTH_DRAGON",
+   110
+  ],
+  [
+   "WATER_DRAGON",
+   108
+  ],
+  [
+   "FIRE_DRAGON",
+   104
+  ],
+  [
+   "HEXTECH_DRAGON",
+   95
+  ],
+  [
+   "CHEMTECH_DRAGON",
+   90
+  ],
+  [
+   "AIR_DRAGON",
+   89
+  ]
+ ],
+ "atakhan_kills": 0,
+ "control_wards_bought_per_jungler_game": 4.655258764607679,
+ "jungler_vision_score_per_min": 1.3070565857583136
+}

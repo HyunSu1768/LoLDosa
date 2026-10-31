@@ -17,7 +17,7 @@
     <button class="tab" data-tab="settings">설정</button>
   </nav>
   <div class="pills">
-    <label class="toggle" title="문장 옆에 수치·표본 수·출처를 표시합니다"><input type="checkbox" id="show-ev"> 근거 보기</label>
+    <label class="toggle" title="문장 옆에 수치·판 수·출처를 보여줘요"><input type="checkbox" id="show-ev"> 근거 보기</label>
     <span id="pill-lcu" class="pill">클라이언트</span>
     <span id="pill-ws" class="pill">연결 중</span>
   </div>
@@ -78,7 +78,7 @@
         <p id="ai-status" class="muted"></p>
       </div>
 
-      <details class="more"><summary>자세한 데이터 보기 <span class="muted">(동선·갱·매치업·오브젝트·조합)</span></summary>
+      <details class="more"><summary>자세한 데이터 보기 <span class="muted">(동선·갱·상성·오브젝트·조합)</span></summary>
         <div id="cards" class="cards"></div>
       </details>
     </div>
@@ -105,12 +105,12 @@
 <section id="tab-learn" class="tabpane">
   <div class="learn">
     <aside class="learn-side">
-      <input id="learn-search" placeholder="개념 검색 (예: 프리징, 트래킹)">
+      <input id="learn-search" placeholder="개념 검색 (예: 프리징, 역갱)">
       <div id="learn-reco"></div>
       <div id="learn-list"></div>
     </aside>
     <div id="learn-detail" class="learn-detail">
-      <div class="empty small"><h2>롤 개념 학습</h2><p>왼쪽에서 개념을 고르세요. 복기에서 지적된 개념은 위쪽 '추천 학습'에 모여요.</p></div>
+      <div class="empty small"><h2>롤 개념 학습</h2><p>왼쪽에서 개념을 고르세요. 복기에서 지적된 개념은 위쪽 '다시 볼 개념'에 모여요.</p></div>
     </div>
   </div>
 </section>
@@ -118,10 +118,10 @@
 <!-- ============================ 설정 ============================ -->
 <section id="tab-settings" class="tabpane">
   <div class="settings">
-    <div class="field"><label>내 Riot ID</label><input id="set-riot-id" placeholder="닉네임#태그"><p class="muted">경기 복기에 사용합니다.</p></div>
-    <div class="field"><label>비교 기준 티어 (갱 판단 등)</label>
+    <div class="field"><label>내 Riot ID</label><input id="set-riot-id" placeholder="닉네임#태그"><p class="muted">경기 복기에 써요.</p></div>
+    <div class="field"><label>비교할 티어 (갱 추천 등)</label>
       <select id="set-bucket"><option value="platinum">플래티넘 (내 티어대)</option><option value="apex">마스터 이상</option></select>
-      <p class="muted">상대 반응이 중요한 항목(갱 대상)은 이 티어 데이터를 우선 씁니다. 표본이 부족하면 마스터+ 데이터를 씁니다.</p></div>
+      <p class="muted">갱처럼 상대 반응에 따라 달라지는 건 이 티어 기록을 먼저 써요. 판 수가 부족하면 마스터+ 기록을 써요.</p></div>
     <div class="field"><label><input type="checkbox" id="set-ai"> AI 코치 사용 (Claude 구독)</label></div>
     <div class="field">
       <label>내 정글 챔프폭 <span id="pool-count" class="muted"></span></label>

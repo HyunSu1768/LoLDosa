@@ -85,7 +85,7 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
         try:
             store = MatchStore(settings.data_dir, filename=PERSONAL_DB)
         except duckdb.IOException:
-            raise HTTPException(409, "다른 프로그램(터미널의 loldosa review 등)이 경기 DB 를 쓰는 중입니다. 잠시 후 다시 시도하세요.")
+            raise HTTPException(409, "다른 프로그램(터미널의 loldosa review 등)이 경기 DB를 쓰는 중이에요. 잠시 후 다시 시도하세요.")
         try:
             yield store
         finally:
@@ -139,7 +139,7 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
             raise
         except Exception:  # 감시가 조용히 죽지 않도록
             log.exception("챔선 감시 중 오류")
-            await hub.send({"type": "error", "message": "챔피언 선택 감시 중 오류가 났습니다. 터미널 로그를 확인하세요."})
+            await hub.send({"type": "error", "message": "챔피언 선택 감시 중 오류가 났어요. 터미널 로그를 확인하세요."})
 
     async def _watch() -> None:
         if replay:
@@ -220,7 +220,7 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
     async def learn_concept(cid: str):
         c = by_id.get(cid)
         if not c:
-            raise HTTPException(404, "없는 개념입니다")
+            raise HTTPException(404, "없는 개념이에요")
         progress.mark_read(cid)
         related = [{"id": r, "title": by_id[r]["title"]} for r in c.get("related", []) if r in by_id]
         from ..learn.skills import CHECKS
@@ -236,7 +236,7 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
     @app.post("/api/learn/{cid}/quiz")
     async def learn_quiz(cid: str, body: dict = Body(...)):
         if cid not in by_id:
-            raise HTTPException(404, "없는 개념입니다")
+            raise HTTPException(404, "없는 개념이에요")
         progress.record_quiz(cid, bool(body.get("correct")))
         return progress.data["quiz"][cid]
 
@@ -244,7 +244,7 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
 
     def review_ready():
         if not settings.riot_api_key:
-            raise HTTPException(400, "RIOT_API_KEY 가 없습니다 (.env)")
+            raise HTTPException(400, "RIOT_API_KEY가 없어요 (.env)")
 
     @app.post("/api/review/sync")
     async def review_sync(body: dict = Body(default={})):
@@ -254,7 +254,7 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
         review_ready()
         riot_id = (body.get("riot_id") or user.riot_id).strip()
         if not riot_id:
-            raise HTTPException(400, "Riot ID 를 입력하세요 (닉네임#태그)")
+            raise HTTPException(400, "Riot ID를 입력하세요 (닉네임#태그)")
         try:
             async with personal_lock:
                 async with RiotClient(settings.riot_api_key, settings.platform, settings.region) as riot:
@@ -275,7 +275,7 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
         except ValueError as e:
             raise HTTPException(400, str(e))
         except RiotApiError as e:
-            raise HTTPException(502, "Riot 이 키를 거부했습니다 (.env 의 RIOT_API_KEY 확인)" if e.status in (401, 403)
+            raise HTTPException(502, "Riot이 키를 거부했어요 (.env의 RIOT_API_KEY 확인)" if e.status in (401, 403)
                                 else str(e))
 
     def annotate(games: list[dict]) -> list[dict]:
@@ -366,14 +366,14 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
 
         cid = body.get("concept", "")
         if cid and cid not in CHECKS:
-            raise HTTPException(400, "측정할 수 있는 개념만 연습 목표로 정할 수 있어요")
+            raise HTTPException(400, "경기 기록으로 체크할 수 있는 개념만 연습 목표로 정할 수 있어요")
         user.update({"focus_concept": cid, "onboarded": True}).save(settings.data_dir)
         return {"focus": concept_brief(cid) if cid else None}
 
     @app.get("/api/review/{match_id}")
     async def review_match(match_id: str):
         if not user.puuid:
-            raise HTTPException(400, "먼저 Riot ID 로 경기를 불러오세요")
+            raise HTTPException(400, "먼저 Riot ID로 경기를 불러오세요")
         try:
             async with personal_lock:
                 return await asyncio.to_thread(_review, match_id)
@@ -383,7 +383,7 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
     @app.post("/api/review/{match_id}/ai")
     async def review_ai(match_id: str):
         if not coach:
-            return {"status": "disabled", "message": "AI 코치가 꺼져 있습니다"}
+            return {"status": "disabled", "message": "AI 코치가 꺼져 있어요"}
         async with personal_lock:
             rv = await asyncio.to_thread(_review, match_id)
         return await coach.coach_review(rv)
