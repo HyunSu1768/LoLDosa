@@ -4,6 +4,11 @@ name: build-app
 # Windows(.zip 안 LoLDosa.exe)·macOS 빌드를 만들어 아티팩트로 올린다.
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "이 이름으로 Release 를 만들고 zip 을 올려요 (비우면 아티팩트만)"
+        required: false
+        default: ""
   push:
     tags: ["v*"]
 
@@ -64,8 +69,12 @@ jobs:
         run: |
           cd dist
           if [ "$RUNNER_OS" = "Windows" ]; then 7z a -tzip ../LoLDosa-Windows.zip LoLDosa > /dev/null; else ditto -c -k --keepParent LoLDosa.app ../LoLDosa-macOS.zip; fi
-      - name: Release (v* 태그일 때)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Release (v* 태그 또는 수동 실행 때 release_tag 를 주면)
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.release_tag || github.ref_name }}
+          name: LoLDosa ${{ inputs.release_tag || github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          make_latest: true
           files: backend/LoLDosa-*.zip
