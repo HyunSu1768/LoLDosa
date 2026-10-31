@@ -126,7 +126,8 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
         await hub.send({"type": "briefing", "state": state_view(state, champs), "briefing": b,
                         "ddragon": champs.version,
                         "focus": concept_brief(user.focus_concept) if user.focus_concept else None,
-                        "practice": await asyncio.to_thread(top_practice)})
+                        "practice": await asyncio.to_thread(top_practice),
+                        "my_champs": gap_cache.get("champs", {})})
         # AI 는 비용·시간이 들어서 의미 있는 시점에만: 내 픽 확정 직후, 전원 확정
         if coach and user.ai_enabled and state.stage in (Stage.POST_MY_PICK, Stage.FINAL) and b["cards"]:
             key = (state.stage.value, b["my_champion"], b["enemy_jungler"],
@@ -453,6 +454,12 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
                 if len(rows) >= 3:
                     g = personal_gap(rows, ref, "challenger", limit=1)
                     v = g["gaps"][0] if g["gaps"] else None
+                    by: dict = {}
+                    for r in rows:
+                        by.setdefault(r["champion_id"], []).append(r)
+                    gap_cache["champs"] = {str(c): {"progress": personal_gap(rs, ref, "challenger", 1)["progress"],
+                                                     "games": len(rs), "wins": sum(1 for x in rs if x["win"])}
+                                           for c, rs in by.items() if len(rs) >= 3}
             except HTTPException:
                 return gap_cache.get("v")
         gap_cache.update(t=_t.time(), v=v)
@@ -480,6 +487,15 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
             for x in res["gaps"] + res["strengths"]:
                 b = before.get(x["key"])
                 x["before_text"] = b["mine_text"] if b else None
+        # 챔피언별: 같은 지표로 챔피언마다 진행도 (3판 이상)
+        by: dict[int, list] = {}
+        for r in rows:
+            by.setdefault(r["champion_id"], []).append(r)
+        res["by_champion"] = sorted(
+            [{"champion_id": c, "name": champs.name(c), "key": (champs.get(c).key if champs.get(c) else ""),
+              "games": len(rs), "wins": sum(1 for x in rs if x["win"]),
+              "progress": personal_gap(rs, ref, "challenger", 1)["progress"]}
+             for c, rs in by.items() if len(rs) >= 3], key=lambda x: -(x["progress"] or 0))
         res["groups"] = ref["groups"]
         res["ready"] = True
         return res

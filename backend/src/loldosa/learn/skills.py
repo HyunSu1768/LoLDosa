@@ -135,8 +135,11 @@ def _gap_check(key):
         r = ref and ref["features"].get(key)
         if not r or f.get(key) is None:
             return "na", "-"
+        from ..analysis.gap import champ_adjust
+
         v, ft = f[key], BY_KEY[key]
-        ok = v >= r["threshold"] if r["higher_better"] else v <= r["threshold"]
+        adj = champ_adjust(f, key, ref)  # 챔피언 특성 보정 후 판정
+        ok = adj >= r["threshold"] if r["higher_better"] else adj <= r["threshold"]
         return ("pass" if ok else "fail"), f"{ft.label} {fmt_value(ft, v)} (고수 기준 {fmt_value(ft, r['threshold'])})"
     return fn
 

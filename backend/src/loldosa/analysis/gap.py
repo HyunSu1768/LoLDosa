@@ -249,7 +249,31 @@ def build_reference(groups: dict[str, list[dict]], high: tuple[str, ...], low: s
                            "p25": round(_q(vals(rows), 0.25), 3), "p75": round(_q(vals(rows), 0.75), 3)}
                        for g, rows in groups.items() if len(vals(rows)) >= 10},
         }
+    # 챔피언 보정: 마스터+ 에서 챔피언별 중앙값이 전체 중앙값과 얼마나 다른지 (15판 이상인 챔피언만)
+    base_rows = groups.get("apex") or hi_rows
+    ref["champ_offset"] = {}
+    for key, r in ref["features"].items():
+        if not r["validated"]:
+            continue
+        allv = [x[key] for x in base_rows if x.get(key) is not None]
+        if not allv:
+            continue
+        overall = _q(allv, 0.5)
+        by: dict[int, list] = {}
+        for x in base_rows:
+            if x.get(key) is not None:
+                by.setdefault(x["champion_id"], []).append(x[key])
+        ref["champ_offset"][key] = {str(c): round(_q(v, 0.5) - overall, 4) for c, v in by.items() if len(v) >= 15}
     return ref
+
+
+def champ_adjust(row: dict, key: str, ref: dict) -> float | None:
+    """챔피언 특성 빼기: 이 챔피언 고수들이 원래 높거나 낮은 만큼 보정한 값."""
+    v = row.get(key)
+    if v is None:
+        return None
+    off = (ref.get("champ_offset", {}).get(key) or {}).get(str(row.get("champion_id")), 0.0)
+    return v - off
 
 
 # ---- 내 경기 진단 ------------------------------------------------------------------
@@ -277,7 +301,7 @@ def personal_gap(rows: list[dict], ref: dict, target: str = "challenger", limit:
         if not r["validated"] or key not in BY_KEY:
             continue
         f = BY_KEY[key]
-        vals = [x[key] for x in rows if x.get(key) is not None]
+        vals = [champ_adjust(x, key, ref) for x in rows if x.get(key) is not None]
         if len(vals) < 3:
             continue
         mine = _q(vals, 0.5)
@@ -296,12 +320,14 @@ def personal_gap(rows: list[dict], ref: dict, target: str = "challenger", limit:
             "platinum_text": fmt_value(f, base["median"]),
             "groups_text": {k: fmt_value(f, v["median"]) for k, v in g.items()},
             "auc": r["auc"], "short": round(short, 2), "priority": round(max(short, 0) * (r["auc"] - 0.5), 4),
+            # 한 번에 챌린저까지는 무리라서, 남은 거리의 1/3씩 끊어서 '이번 주 목표'로
+            "step_text": fmt_value(f, mine + (tgt["median"] - mine) / 3),
         })
     # 진행도: 지표마다 플래티넘 중앙값=0, 목표 중앙값=100 으로 놓고 가르는 힘(AUC)으로 가중 평균
     w = sum(x["auc"] - 0.5 for x in items)
     progress = round(sum((x["auc"] - 0.5) * min(max(1 - x["short"], 0), 1.2) for x in items) / w * 100) if w else None
     gaps = sorted([x for x in items if x["short"] > 0.15], key=lambda x: -x["priority"])
-    strengths = sorted([x for x in items if x["short"] <= 0], key=lambda x: -x["auc"])
+    strengths = sorted([x for x in items if x["short"] <= 0.1], key=lambda x: -x["auc"])
     return {"target": target, "games": len(rows), "progress": progress, "gaps": gaps[:limit], "all": sorted(items, key=lambda x: -x["priority"]),
             "strengths": strengths[:3]}
 
@@ -313,7 +339,8 @@ def game_gap(feat: dict, ref: dict) -> list[dict]:
         if not r["validated"] or key not in BY_KEY or feat.get(key) is None:
             continue
         f, v, g = BY_KEY[key], feat[key], r["groups"]
-        ok = v >= r["threshold"] if r["higher_better"] else v <= r["threshold"]
+        adj = champ_adjust(feat, key, ref)  # 판정은 챔피언 특성을 뺀 값으로
+        ok = adj >= r["threshold"] if r["higher_better"] else adj <= r["threshold"]
         out.append({"key": key, "label": f.label, "concept": f.concept, "mine_text": fmt_value(f, v), "ok": ok,
                     "threshold_text": fmt_value(f, r["threshold"]), "higher_better": r["higher_better"],
                     "platinum_text": fmt_value(f, g[ref["low"]]["median"]) if ref["low"] in g else "-",

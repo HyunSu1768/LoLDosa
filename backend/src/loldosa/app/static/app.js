@@ -194,6 +194,7 @@ async function loadGap() {
       <div class="gap-main"><b>${esc(x.label)}</b>
         <div class="gap-nums">나 <b>${esc(x.mine_text)}</b>${x.before_text ? ` <span class="muted">(전 ${esc(x.before_text)})</span>` : ""} · 플래티넘 ${esc(x.groups_text.platinum || "-")} · 챌린저 <b>${esc(x.groups_text.challenger || "-")}</b> · 프로 ${esc(x.groups_text.pro || "-")}</div>
         <div class="gap-drill">다음 판: ${esc(x.drill)}</div>
+        <div class="gap-step">이번 주 목표: <b>${esc(x.step_text)}</b> <span class="muted">(챌린저까지 남은 거리의 1/3 · 판이 쌓이면 다시 계산돼요)</span></div>
         ${x.concept === "communication-pings" ? `<div class="muted small-note">핑 횟수 자체가 목표는 아니에요. 핑을 치려면 미니맵을 보고 있어야 해서, 고수일수록 많이 치는 거예요. 의미 없는 핑 연타는 오히려 팀을 흔들어요.</div>` : ""}
         <div class="row"><button class="ghost small" onclick="openConcept('${x.concept}')">개념 보기</button>
         ${CHECKABLE.has(x.concept) ? `<button class="ghost small" onclick="setFocus('${x.concept}')">연습 목표로</button>` : ""}</div></div>
@@ -202,6 +203,9 @@ async function loadGap() {
     <div class="gap-head"><h3 class="sec">챌린저까지 가장 큰 차이 <span class="muted">내 최근 정글 ${g.games}판 · 프로·챌린저·마스터+ ${(g.groups.pro || 0) + (g.groups.challenger || 0) + (g.groups.apex || 0)}판과 플래티넘 ${g.groups.platinum}판을 실제로 비교해 찾은 지표만 써요</span></h3>
       <div class="gap-score"><div class="big">${g.progress}<small>점</small></div><div class="muted">플래티넘 0 · 챌린저 100${trend}</div>${bar(g.progress)}</div></div>
     ${g.gaps.length ? g.gaps.map(item).join("") : `<p>검증된 지표에서 챌린저 중앙값과 큰 차이가 없어요. 👍</p>`}
+    ${g.by_champion && g.by_champion.length > 1 ? `<div class="gap-champs"><span class="muted">챔피언별 진행도 (3판 이상):</span> ${g.by_champion.map((c) =>
+      `<span class="gap-champ">${imgTag(c.key)} ${esc(c.name)} <b>${c.progress}점</b> <span class="muted">${c.wins}승 ${c.games - c.wins}패</span></span>`).join("")}
+      <div class="muted">점수가 높은 챔피언일수록 고수처럼 플레이하고 있다는 뜻이에요. 랭크에선 이 챔피언들을 먼저 고르세요.</div></div>` : ""}
     ${g.strengths.length ? `<div class="gap-strength">이미 챌린저 수준: ${g.strengths.map((x) => `<span class="strength">✓ ${esc(x.label)} ${esc(x.mine_text)}</span>`).join(" ")}</div>` : ""}
   </div>`;
 }
@@ -281,7 +285,7 @@ function renderTeams(st) {
 function pickCard(r, { score = true } = {}) {
   const why = r.reasons.length > 1 ? r.reasons[1].text : (r.reasons[0] ? r.reasons[0].text : "");
   return `<div class="pick" onclick="this.classList.toggle('open')">
-    <div class="pick-top">${imgTag(r.key)}<span class="pick-name">${esc(r.name)}${r.in_pool ? '<span class="pool-badge">내 폭</span>' : ""}</span>
+    <div class="pick-top">${imgTag(r.key)}<span class="pick-name">${esc(r.name)}${r.in_pool ? '<span class="pool-badge">내 폭</span>' : ""}${myChamps[r.champion_id] ? `<span class="pool-badge me" title="내 최근 ${myChamps[r.champion_id].games}판 기준 챌린저 진행도">내 ${myChamps[r.champion_id].progress}점</span>` : ""}</span>
       ${score ? `<span class="pick-score">${(r.score * 100).toFixed(1)}%</span>` : ""}</div>
     <div class="pick-why">${esc(why)}</div>
     <ul>${r.reasons.map((i) => `<li>${esc(i.text)}${evChips(i.evidence)}</li>`).join("")}</ul></div>`;
@@ -299,8 +303,10 @@ function focusBanner(f, practice) {
   return focusPart + gapPart + stale;
 }
 
+let myChamps = {};
 function onBriefing(msg) {
   ddragon = msg.ddragon || ddragon;
+  myChamps = msg.my_champs || myChamps;
   const st = msg.state, b = msg.briefing;
   evidence = Object.fromEntries(b.evidence.map((e) => [e.id, e]));
   $("brief-idle").classList.add("hidden");
