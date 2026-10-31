@@ -47,6 +47,14 @@ def run(replay: Path | None = None, port: int = 8765, browser: bool = False, ai:
     t.start()
     while not server.started:
         time.sleep(0.05)
-    webview.create_window("LoLDosa · 정글 브리핑", url, width=1180, height=860, min_size=(820, 600))
-    webview.start()
+    try:
+        webview.create_window("LoLDosa · 정글 코치", url, width=1180, height=860, min_size=(820, 600))
+        webview.start()
+    except Exception as e:  # noqa: BLE001 — WebView2 가 없는 PC(PC방 등)에서는 브라우저로 연다
+        print(f"앱 창을 띄우지 못해서 브라우저로 열어요 ({e})")
+        webbrowser.open(url)
+        try:
+            t.join()
+        except KeyboardInterrupt:
+            pass
     server.should_exit = True

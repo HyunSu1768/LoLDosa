@@ -7,6 +7,9 @@ on:
   push:
     tags: ["v*"]
 
+permissions:
+  contents: write   # v* 태그면 Release 에 zip 을 올린다 (로그인 없이 받는 공개 링크)
+
 jobs:
   build:
     strategy:
@@ -56,3 +59,13 @@ jobs:
           path: |
             backend/dist/LoLDosa
             backend/dist/LoLDosa.app
+      - name: Zip
+        shell: bash
+        run: |
+          cd dist
+          if [ "$RUNNER_OS" = "Windows" ]; then 7z a -tzip ../LoLDosa-Windows.zip LoLDosa > /dev/null; else ditto -c -k --keepParent LoLDosa.app ../LoLDosa-macOS.zip; fi
+      - name: Release (v* 태그일 때)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: backend/LoLDosa-*.zip
