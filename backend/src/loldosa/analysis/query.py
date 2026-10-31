@@ -354,3 +354,12 @@ class StatsDB:
             if fr and fr["s"]:
                 r["first_recall_s"] = fr["s"]
         return r
+
+    def path_medoid(self, champ: int, team_id: int, style: str = "any") -> dict | None:
+        if not self._has("path_medoids"):
+            return None
+        r = self.one("SELECT * FROM path_medoids WHERE champion_id=? AND team_id=? AND style=?", [champ, team_id, style])
+        if r:
+            import json as _json
+            r["points"] = _json.loads(r["points"])
+        return r

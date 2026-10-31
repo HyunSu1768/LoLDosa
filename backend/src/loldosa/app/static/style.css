@@ -333,3 +333,10 @@ button.small { padding: 5px 10px; font-size: 12px; margin-top: 8px; }
 .panel.due { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-color: rgba(212,180,110,.5); }
 .rank-line { font-size: 13px; color: var(--text2); margin-bottom: 10px; }
 .mo-body.small { grid-template-columns: 240px 1fr; }
+
+/* 이미지 트레이닝 */
+.paths { display: grid; grid-template-columns: 280px 1fr; gap: 16px; margin-top: 8px; }
+.path-steps { margin: 8px 0; padding-left: 18px; color: var(--text2); font-size: 13px; }
+.path-steps li { padding: 3px 0; } .path-steps li.now { color: var(--gold2); font-weight: 700; } .path-steps li.later { opacity: .45; }
+#paths-styles .on { border-color: var(--gold); color: var(--gold2); }
+@media (max-width: 900px) { .paths { grid-template-columns: 1fr; } }

@@ -289,6 +289,50 @@ function onBriefing(msg) {
       <span class="card-headline">${linkify(c.headline)}</span></div>
       <ul class="card-items">${c.items.map((i) => `<li class="${i.kind}">${linkify(i.text)}${evChips(i.evidence)}</li>`).join("")}</ul></article>`).join("");
   if (!["post_my_pick", "final"].includes(b.stage)) $("ai").classList.add("hidden");
+  if (!pathState || JSON.stringify(pathState.paths) !== JSON.stringify(b.paths)) renderPaths(b.paths);
+}
+
+/* ---------- 이미지 트레이닝 ---------- */
+const REGION_SAY = { own_jungle: "우리 정글", enemy_jungle: "상대 정글", river: "강가", top: "탑", mid: "미드", bot: "봇", base: "본진" };
+let pathState = null;
+function renderPaths(paths) {
+  const box = $("paths-box");
+  if (!paths || !paths.mine || !paths.mine.length) { box.classList.add("hidden"); return; }
+  box.classList.remove("hidden");
+  pathState = { paths, style: 0, step: 6, timer: null };
+  $("paths-styles").innerHTML = paths.mine.map((p, i) => `<button class="ghost small ${i === 0 ? "on" : ""}" data-i="${i}">${esc(p.label)} · ${p.games}판</button>`).join("");
+  document.querySelectorAll("#paths-styles button").forEach((b) => (b.onclick = () => {
+    pathState.style = +b.dataset.i; pathState.step = 6;
+    document.querySelectorAll("#paths-styles button").forEach((x) => x.classList.toggle("on", x === b));
+    drawPaths();
+  }));
+  $("paths-play").onclick = playPaths;
+  drawPaths();
+}
+function drawPaths() {
+  const S = 280, M = 14870, px = (x) => (x / M) * S, py = (y) => S - (y / M) * S;
+  const mine = pathState.paths.mine[pathState.style], enemy = pathState.paths.enemy;
+  const upto = (pts) => pts.filter((p) => p.m <= pathState.step);
+  const line = (pts, color) => pts.length > 1 ? `<polyline points="${pts.map((p) => `${px(p.x)},${py(p.y)}`).join(" ")}" fill="none" stroke="${color}" stroke-width="2.5" stroke-dasharray="4 3" stroke-opacity=".85"/>` : "";
+  const dots = (pts, color) => pts.map((p, i) => `<circle cx="${px(p.x)}" cy="${py(p.y)}" r="${i === pts.length - 1 ? 9 : 6}" fill="${color}" fill-opacity="${i === pts.length - 1 ? 1 : .6}"/>
+      <text x="${px(p.x)}" y="${py(p.y) + 3}" font-size="8" text-anchor="middle" fill="#000">${p.m}</text>`).join("");
+  const mp = upto(mine.points), ep = enemy ? upto(enemy.points) : [];
+  $("paths-map").innerHTML = `<div class="snapmap" style="width:${S}px;height:${S}px"><img class="bg" src="https://ddragon.leagueoflegends.com/cdn/${ddragon}/img/map/map11.png" alt="" onerror="this.remove()">
+    <svg viewBox="0 0 ${S} ${S}" style="position:absolute;inset:0">${line(ep, "#ff5f66")}${dots(ep, "#ff5f66")}${line(mp, "#f0d79a")}${dots(mp, "#f0d79a")}</svg></div>
+    <div class="legend"><span><i style="background:#f0d79a"></i>나 (${esc(mine.label)})</span>${enemy ? `<span><i style="background:#ff5f66"></i>상대 ${esc(enemy.name)}</span>` : ""}</div>`;
+  $("paths-steps").innerHTML = mine.points.map((p) => {
+    const e = enemy && enemy.points.find((q) => q.m === p.m);
+    return `<li class="${p.m === pathState.step ? "now" : p.m > pathState.step ? "later" : ""}"><b>${p.m}:00</b> ${REGION_SAY[p.region] || p.region} · ${p.camps}캠프 먹음
+      ${e ? `<span class="muted"> / 상대 정글: ${REGION_SAY[e.region] || e.region}</span>` : ""}</li>`;
+  }).join("");
+}
+function playPaths() {
+  clearInterval(pathState.timer);
+  pathState.step = 1; drawPaths();
+  pathState.timer = setInterval(() => {
+    pathState.step += 1; drawPaths();
+    if (pathState.step >= 6) clearInterval(pathState.timer);
+  }, 1100);
 }
 
 function renderAI(msg) {

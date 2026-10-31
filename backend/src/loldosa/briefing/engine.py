@@ -121,6 +121,7 @@ class BriefingEngine:
             ]
             b.cards = [c for c in b.cards if c and c.items]
             b.plan = self.build_plan(my_champ, enemy_jg)
+            b.paths = self.paths_for(state, my_champ, enemy_jg)
         b.evidence = self.ev.items
         return b
 
@@ -686,6 +687,23 @@ class BriefingEngine:
             self.facts.setdefault("turns", {})[obj] = {
                 "rate": rate, "n": n, "eid": eid, "median": med,
                 "useful": n >= MIN_INFER * 2 and rate["prep"] - rate["none"] >= 0.05}
+
+    def paths_for(self, state, champ: int, enemy_jg: int) -> dict:
+        """고티어 실제 동선 하나(메도이드)를 클리어 방식별로. 상대 정글은 가장 흔한 방식 하나."""
+        out = {"mine": [], "enemy": None}
+        team = state.my_team_id
+        style_ko = {"full_clear": "풀캠", "partial": "4~5캠프 후 개입", "three_or_less": "3캠 갱"}
+        for style in ("full_clear", "partial", "three_or_less"):
+            m = self.stats.path_medoid(champ, team, style)
+            if m:
+                out["mine"].append({"style": style, "label": style_ko[style], "games": m["games"],
+                                    "points": m["points"], "match_id": m["match_id"]})
+        out["mine"].sort(key=lambda x: -x["games"])
+        if enemy_jg:
+            m = self.stats.path_medoid(enemy_jg, state.enemy_team_id, "any")
+            if m:
+                out["enemy"] = {"games": m["games"], "points": m["points"], "name": self.name(enemy_jg)}
+        return out
 
     # ------------------------------------------------------------ plan
 

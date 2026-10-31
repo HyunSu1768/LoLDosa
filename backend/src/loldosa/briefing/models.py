@@ -61,6 +61,7 @@ class Briefing:
     scope_label: str = ""
     notes: list[str] = field(default_factory=list)
     plan: list[PlanLine] = field(default_factory=list)
+    paths: dict = field(default_factory=dict)  # 이미지 트레이닝: 대표 동선
     picks: list[Recommendation] = field(default_factory=list)
     picks_outside: list[Recommendation] = field(default_factory=list)  # 챔프폭 밖 참고
     bans: list[Recommendation] = field(default_factory=list)

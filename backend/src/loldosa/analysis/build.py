@@ -487,6 +487,15 @@ def build_stats(data_dir: Path, champs: ChampionIndex) -> dict[str, int]:
         con.unregister("_ds")
         counts["decision_states"] = len(rows)
 
+        # 이미지 트레이닝: 챔피언·진영·클리어 방식별 대표 동선(실제 한 판)
+        from .paths import build_medoids
+        med = build_medoids(con, "src.")
+        cols = ["champion_id", "team_id", "style", "games", "match_id", "points"]
+        con.register("_pm", pa.Table.from_pydict({c: [r[i] for r in med] for i, c in enumerate(cols)}))
+        con.execute("CREATE TABLE path_medoids AS SELECT * FROM _pm").fetchall()
+        con.unregister("_pm")
+        counts["path_medoids"] = len(med)
+
         pro = data_dir / "pro.duckdb"
         if pro.exists():
             con.execute(f"ATTACH '{pro}' AS pro (READ_ONLY)").fetchall()
