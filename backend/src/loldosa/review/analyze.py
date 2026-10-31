@@ -16,6 +16,8 @@ from ..analysis.query import StatsDB
 from ..briefing.engine import BAND_KO, josa, mmss, pct, signed
 from ..briefing.models import EvidenceLog
 from ..ddragon import ChampionIndex
+from ..analysis.turns import (LATE_FROM_MS, OBJECTIVE_LANES, SETUP_FROM_MS, SETUP_TO_MS, TURN_KO, shop_visits,
+                              team_turn)
 from ..store.matches import MatchStore
 
 SRC_MINE = "내 경기 기록 (Riot Match-V5 타임라인)"
@@ -98,10 +100,13 @@ class Reviewer:
         parts = [dict(zip(cols, r)) for r in x(f"SELECT {', '.join(cols)} FROM participants WHERE match_id=?",
                                                  [match_id])]
         frames: dict = {}
-        for pid, minute, fx, fy, level, gold, jcs in x(
-                "SELECT participant_id, minute, x, y, level, total_gold, jungle_cs FROM frames WHERE match_id=?",
+        for pid, minute, fx, fy, level, gold, jcs, cur in x(
+                "SELECT participant_id, minute, x, y, level, total_gold, jungle_cs, current_gold FROM frames WHERE match_id=?",
                 [match_id]):
-            frames.setdefault(pid, {})[minute] = {"x": fx, "y": fy, "level": level, "gold": gold, "jcs": jcs}
+            frames.setdefault(pid, {})[minute] = {"x": fx, "y": fy, "level": level, "gold": gold, "jcs": jcs,
+                                                  "cur": cur}
+        self.purchases = [(p, t) for p, t in x(
+            "SELECT participant_id, ts_ms FROM events WHERE match_id=? AND type='ITEM_PURCHASED'", [match_id])]
         ecols = ["ts_ms", "type", "participant_id", "victim_id", "assists", "team_id", "monster_type",
                  "monster_sub_type", "x", "y"]
         events = [dict(zip(ecols, r)) for r in x(
@@ -142,6 +147,8 @@ class Reviewer:
                                if 1 <= m <= 10] if enemy_jg else []),
             "team": me["team_id"],
         }
+        self.visits = shop_visits(self.purchases, [(e["victim_id"], e["ts_ms"]) for e in events
+                                                   if e["type"] == "CHAMPION_KILL"])
         rv.moments = self.moments(events)
 
         if not rv.is_jungle:
@@ -233,6 +240,13 @@ class Reviewer:
                 d = _dist(p, (e["x"], e["y"]))
                 out.append(Moment(t, "objective", f"{mmss(t)} {'우리' if ours else '적'} 팀 {obj} 획득"
                                   + (f" — 나와의 거리 {d:,.0f}" if d != float("inf") else ""), e["x"], e["y"], ours))
+        for v in self.visits:
+            if v.ts_ms > 15 * 60000 or v.death_back:
+                continue
+            if v.participant_id == pid:
+                out.append(Moment(v.ts_ms / 1000, "recall", f"{mmss(v.ts_ms / 1000)} 귀환(상점 구매)"))
+            elif ejg and v.participant_id == ejg["participant_id"]:
+                out.append(Moment(v.ts_ms / 1000, "enemy_recall", f"{mmss(v.ts_ms / 1000)} 적 정글 귀환(상점 구매)"))
         return sorted(out, key=lambda m: m.t)
 
     # ------------------------------------------------------------------ jungle review
@@ -452,3 +466,83 @@ class Reviewer:
                         rv.lessons.append(Lesson(f"{mmss(t)} 불리한 레벨 구간 교전",
                                                  f"{BAND_KO[band]}에 적 정글과 싸워 졌습니다. 고티어 {cname}도 이 구간 정글 교전 승률이 "
                                                  f"{pct(rate)}로 낮은 편이라, 이 시점엔 교전을 피하고 성장했어야 합니다.", 2, ev))
+
+        # 9) 턴: 첫 귀환 시각, 오브젝트 직전 귀환, 골드 들고 사망
+        self.turn_review(rv, events)
+
+    def turn_review(self, rv: Review, events: list[dict]) -> None:
+        s, me = self.scope, self.me
+        pid, champ, team = me["participant_id"], me["champion_id"], me["team_id"]
+        cname = self.name(champ)
+        mine = [v for v in self.visits if v.participant_id == pid]
+        first = next((v for v in mine if not v.death_back), None)
+        fr = self.stats.first_recall(s, champ)
+        if first and fr and fr["games"] >= 10:
+            t = first.ts_ms / 1000
+            verdict = "neutral" if fr["p25_s"] <= t <= fr["p75_s"] else "bad" if t > fr["p75_s"] + 60 else "neutral"
+            rv.metrics.append(Metric("첫 귀환", mmss(t), f"{mmss(fr['median_s'])} ({mmss(fr['p25_s'])}~{mmss(fr['p75_s'])})",
+                                     verdict, [self.mine(f"첫 귀환(첫 상점 구매) {mmss(t)}"),
+                                               self.bench(f"{cname} 첫 귀환 중앙 {mmss(fr['median_s'])}, "
+                                                          f"25~75% {mmss(fr['p25_s'])}~{mmss(fr['p75_s'])} (n={fr['games']})",
+                                                          fr["games"])]))
+
+        firsts: dict[str, dict] = {}
+        for e in events:
+            if e["type"] == "ELITE_MONSTER_KILL" and e["monster_type"] in OBJECTIVE_LANES and e["monster_type"] != "RIFTHERALD":
+                firsts.setdefault(e["monster_type"], e)
+        for obj, e in firsts.items():
+            if e["ts_ms"] > 20 * 60000:
+                continue
+            lanes = [p["participant_id"] for p in self.by_pid.values()
+                     if p["team_id"] == team and p["position"] in OBJECTIVE_LANES[obj]]
+            turn = team_turn(self.visits, e["ts_ms"], pid, lanes)
+            took = e["team_id"] == team
+            stats = self.stats.turn_objective(s, obj)
+            name = TURN_OBJ_KO[obj]
+            t = e["ts_ms"] / 1000
+            lo, hi = mmss(t - SETUP_FROM_MS / 1000), mmss(t - SETUP_TO_MS / 1000)
+            ev = [self.mine(f"{name} {mmss(t)}에 {'우리' if took else '상대'} 팀이 처음 획득, 그 직전 우리 팀 상태: {TURN_KO[turn]}")]
+            prep = [stats[k] for k in ("sync", "jg_only") if k in stats]
+            pg = sum(r["games"] for r in prep)
+            if pg and "none" in stats and "late" in stats:
+                prep_rate = sum(r["took"] for r in prep) / pg
+                none_rate = stats["none"]["took"] / stats["none"]["games"]
+                late_rate = stats["late"]["took"] / stats["late"]["games"]
+                ev.append(self.bench(f"{name} 직전 턴별 획득률: 미리 귀환 {pct(prep_rate)} (n={pg}), 안 함 {pct(none_rate)} "
+                                     f"(n={stats['none']['games']}), 직전 30초 상점 {pct(late_rate)} (n={stats['late']['games']})",
+                                     min(pg, stats["none"]["games"], stats["late"]["games"])))
+            else:
+                prep_rate = none_rate = late_rate = None
+            if turn == "late":
+                rv.lessons.append(Lesson(
+                    f"{mmss(t)} {name} 직전에 귀환 중",
+                    f"{josa(name, '이가')} {mmss(t)}에 잡혔는데, 그 직전 30초 안에 나는 상점에 있었습니다."
+                    + (f" 고티어에서 이런 팀이 가져간 비율은 {pct(late_rate)}뿐입니다." if late_rate is not None else "")
+                    + f" {lo}~{hi} 사이에 미리 귀환해서 정비하고 자리를 잡았어야 합니다.", 3, ev))
+            elif (turn == "none" and not took and prep_rate is not None
+                  and prep_rate - none_rate >= 0.05 and min(pg, stats["none"]["games"]) >= 30):
+                rv.lessons.append(Lesson(
+                    f"{mmss(t)} {name} 전 귀환 턴 없음",
+                    f"{josa(name, '을를')} 내주기 전 {lo}~{hi}에 귀환해서 정비하지 않았습니다."
+                    + (f" 고티어에서 미리 귀환한 팀은 {pct(prep_rate)}, 안 한 팀은 {pct(none_rate)} 가져갔습니다."
+                       if prep_rate is not None else ""), 2, ev))
+            elif turn in ("sync", "jg_only") and took:
+                rv.strengths.append(Lesson(f"{name} 전 귀환 턴", f"{lo}~{hi}에 미리 귀환해서 {josa(name, '을를')} 가져갔습니다.",
+                                           1, ev))
+
+        for e in events:
+            if e["type"] != "CHAMPION_KILL" or e["victim_id"] != pid or e["ts_ms"] > 20 * 60000:
+                continue
+            f = self.frames.get(pid, {}).get(int(e["ts_ms"] // 60000)) or {}
+            cur = f.get("cur")
+            if cur is not None and cur >= 1200:
+                t = e["ts_ms"] / 1000
+                rv.lessons.append(Lesson(
+                    f"{mmss(t)} 골드를 들고 사망",
+                    f"죽기 직전 분({int(e['ts_ms'] // 60000)}:00) 기준 쓰지 않은 골드가 {cur:,}였습니다. "
+                    f"이만큼 모였으면 싸우기 전에 귀환해서 아이템으로 바꾸는 턴을 먼저 잡았어야 합니다.", 2,
+                    [self.mine(f"{int(e['ts_ms'] // 60000)}:00 보유 골드 {cur:,}, {mmss(t)} 사망")]))
+                break
+
+
+TURN_OBJ_KO = {"DRAGON": "첫 드래곤", "HORDE": "공허 유충"}

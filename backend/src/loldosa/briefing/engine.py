@@ -321,6 +321,11 @@ class BriefingEngine:
                     e3 = self.e(f"{self.name(champ)} {CLEAR_KO[kind]} 그룹의 3:00 위치: {text} (n={n})", n)
                     card.add(f"{CLEAR_KO[kind]}인 판의 3:00 위치: {text}", e3)
 
+            fr = self.stats.first_recall(s, champ)
+            if fr and fr["games"] >= 5:
+                e4 = self.e(f"{self.name(champ)} 첫 귀환(첫 상점 구매, 데스 제외) 중앙 {mmss(fr['median_s'])}, "
+                            f"25~75%: {mmss(fr['p25_s'])}~{mmss(fr['p75_s'])} (n={fr['games']})", fr["games"])
+                card.add(f"첫 귀환: 중앙 {mmss(fr['median_s'])} (보통 {mmss(fr['p25_s'])}~{mmss(fr['p75_s'])})", e4)
             main_kind, main_share = max(share.items(), key=lambda kv: kv[1])
             starts = self.stats.start_camps(s, champ, team)
             st_tot = sum(r["games"] for r in starts)
@@ -561,6 +566,14 @@ class BriefingEngine:
                 n = max(v["games"] for v in imp.values())
                 eid = self.e("오브젝트 획득 팀 승률: " + ", ".join(parts) + f" (n≈{n})", n)
                 card.add("획득 팀 승률: " + ", ".join(parts), eid)
+        self._turn_facts(s, o)
+        for obj, tf in self.facts.get("turns", {}).items():
+            card.add(f"{OBJ_TURN_KO[obj]} 직전 귀환 턴: 미리 귀환 {pct(tf['rate']['prep'])} / 안 함 {pct(tf['rate']['none'])} / "
+                     f"직전 30초 상점 {pct(tf['rate']['late'])}", tf["eid"])
+            if tf["useful"]:
+                card.add(f"{OBJ_TURN_KO[obj]}이 잡히기 0:40~2:30 전에 미리 귀환해 정비한 팀이 더 자주 가져갑니다. "
+                         f"잡히기 직전 30초 안에 귀환하면 거의 내줍니다.",
+                         tf["eid"], kind="inference")
         c = self.stats.champ(s, champ)
         if c:
             eid = self.e(f"{self.name(champ)} 팀 첫 드래곤 {pct(c['first_dragon_rate'])}, 첫 유충 {pct(c['first_grub_rate'])}, "
@@ -652,6 +665,28 @@ class BriefingEngine:
             card.headline = "조합 확정 후 갱신"
         return card
 
+    def _turn_facts(self, s, o) -> None:
+        """오브젝트 직전 귀환 턴: 고티어에서 '미리 귀환'한 팀이 실제로 더 가져갔는지."""
+        for obj, med_key in (("DRAGON", "first_dragon_median_s"), ("HORDE", "first_grub_median_s")):
+            t = self.stats.turn_objective(s, obj)
+            if not {"none", "late"} <= t.keys():
+                continue
+            prep = [t[k] for k in ("sync", "jg_only") if k in t]
+            pg, pt = sum(r["games"] for r in prep), sum(r["took"] for r in prep)
+            if not pg:
+                continue
+            rate = {"prep": pt / pg, "none": t["none"]["took"] / t["none"]["games"],
+                    "late": t["late"]["took"] / t["late"]["games"]}
+            n = min(pg, t["none"]["games"], t["late"]["games"])
+            name = OBJ_TURN_KO[obj]
+            eid = self.e(f"{name}이 처음 잡히기 2:30~0:40 전에 정글이 귀환(구매)한 팀의 획득률 {pct(rate['prep'])} (n={pg}), "
+                         f"미리 귀환 안 한 팀 {pct(rate['none'])} (n={t['none']['games']}), "
+                         f"직전 30초 안에 정글이 상점에 있던 팀 {pct(rate['late'])} (n={t['late']['games']})", n)
+            med = (o or {}).get(med_key)
+            self.facts.setdefault("turns", {})[obj] = {
+                "rate": rate, "n": n, "eid": eid, "median": med,
+                "useful": n >= MIN_INFER * 2 and rate["prep"] - rate["none"] >= 0.05}
+
     # ------------------------------------------------------------ plan
 
     def build_plan(self, champ: int, enemy_jg: int) -> list[PlanLine]:
@@ -702,16 +737,27 @@ class BriefingEngine:
             plan.append(PlanLine("주의", " / ".join(warn), warn_ev))
 
         ot, os_ = f.get("obj_times"), f.get("obj_side")
+        has_turn = any(t["useful"] and t["median"] for t in f.get("turns", {}).values())
+        reset = "" if has_turn else ", 7:30쯤 리셋해서 미리 자리 잡기"
         if ot:
             if os_:
                 target = "첫 드래곤" if os_["side"] == "dragon" else "공허 유충"
                 lane = "봇" if os_["side"] == "dragon" else "탑"
                 t = ot["dragon"] if os_["side"] == "dragon" else ot["grub"]
                 plan.append(PlanLine("오브젝트", f"{lane} 라인전이 유리 → {target} 우선 (고티어 중앙 {mmss(t)}), "
-                                     f"7:30쯤 리셋해서 미리 자리 잡기", os_["eids"] + [ot["eid"]]))
+                                     f"{reset.lstrip(', ') or '라인 우선권 유지'}", os_["eids"] + [ot["eid"]]))
             else:
                 plan.append(PlanLine("오브젝트", f"고티어 기준 유충 {mmss(ot['grub'])}, 드래곤 {mmss(ot['dragon'])}쯤 첫 교전 "
-                                     f"→ 7:30쯤 리셋, 우선권 있는 쪽 오브젝트로", [ot["eid"]]))
+                                     f"→ 우선권 있는 쪽 오브젝트로{reset}", [ot["eid"]]))
+        turns = f.get("turns", {})
+        for obj in ("DRAGON", "HORDE"):
+            tf = turns.get(obj)
+            if tf and tf["useful"] and tf["median"]:
+                lo, hi = tf["median"] - 150, tf["median"] - 40
+                plan.append(PlanLine("턴", f"{OBJ_TURN_KO[obj]}(고티어 {mmss(tf['median'])}) 기준 {mmss(lo)}~{mmss(hi)}에 귀환해서 정비 "
+                                     f"→ 미리 귀환한 팀 {pct(tf['rate']['prep'])} vs 안 한 팀 {pct(tf['rate']['none'])}. "
+                                     f"직전 30초 귀환은 {pct(tf['rate']['late'])}", [tf["eid"]]))
+                break
         sc = f.get("scaling")
         if sc:
             text = ("적이 후반형 → 오브젝트로 격차 벌려서 25분 전후에 끝내기" if sc["who"] == "enemy"
@@ -782,4 +828,5 @@ CLEAR_KO = {"full_clear": "6캠프(풀클리어)", "partial": "4~5캠프", "thre
 
 PROFILE_KO = {"ad_heavy": "AD 위주", "ap_heavy": "AP 위주", "balanced": "AD/AP 균형", "unknown": "알 수 없음"}
 DUR_ORDER = ["<25", "25-30", "30-35", "35+"]
+OBJ_TURN_KO = {"DRAGON": "첫 드래곤", "HORDE": "공허 유충"}
 BAND_KO = {"1-3": "1~3레벨", "4-5": "4~5레벨", "6+": "6레벨 이후"}

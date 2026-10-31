@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS bans (
 CREATE TABLE IF NOT EXISTS frames (
     match_id VARCHAR, minute INTEGER, participant_id INTEGER,
     x INTEGER, y INTEGER, level INTEGER, xp INTEGER, total_gold INTEGER,
-    jungle_cs INTEGER, lane_cs INTEGER,
+    jungle_cs INTEGER, lane_cs INTEGER, current_gold INTEGER,
     PRIMARY KEY (match_id, minute, participant_id)
 );
 CREATE TABLE IF NOT EXISTS events (
@@ -72,8 +72,11 @@ CREATE TABLE IF NOT EXISTS events (
     team_id INTEGER,             -- killer team (elite/building) or owner team
     monster_type VARCHAR, monster_sub_type VARCHAR,
     building_type VARCHAR, lane VARCHAR, ward_type VARCHAR,
-    x INTEGER, y INTEGER
+    x INTEGER, y INTEGER,
+    item_id INTEGER              -- ITEM_PURCHASED
 );
+ALTER TABLE frames ADD COLUMN IF NOT EXISTS current_gold INTEGER;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS item_id INTEGER;
 """
 
 COLUMNS = {
@@ -85,14 +88,15 @@ COLUMNS = {
                      "magic_dmg", "physical_dmg", "true_dmg", "dmg_taken", "self_mitigated"],
     "bans": ["match_id", "team_id", "pick_turn", "champion_id"],
     "frames": ["match_id", "minute", "participant_id", "x", "y", "level", "xp", "total_gold",
-               "jungle_cs", "lane_cs"],
+               "jungle_cs", "lane_cs", "current_gold"],
     "events": ["match_id", "ts_ms", "type", "participant_id", "victim_id", "assists", "team_id",
-               "monster_type", "monster_sub_type", "building_type", "lane", "ward_type", "x", "y"],
+               "monster_type", "monster_sub_type", "building_type", "lane", "ward_type", "x", "y", "item_id"],
 }
 
 KEEP_EVENTS = {
     "CHAMPION_KILL", "ELITE_MONSTER_KILL", "BUILDING_KILL", "TURRET_PLATE_DESTROYED",
     "WARD_PLACED", "WARD_KILL", "CHAMPION_SPECIAL_KILL", "DRAGON_SOUL_GIVEN",
+    "ITEM_PURCHASED",  # 상점 방문(귀환) 시각을 ms 단위로 잡기 위해
 }
 
 
@@ -292,20 +296,22 @@ def normalize(match: dict, timeline: dict, bucket: str) -> dict[str, list]:
             pos = pf.get("position") or {}
             out["frames"].append((
                 mid, minute, int(pid), pos.get("x"), pos.get("y"), pf.get("level"), pf.get("xp"),
-                pf.get("totalGold"), pf.get("jungleMinionsKilled"), pf.get("minionsKilled"),
+                pf.get("totalGold"), pf.get("jungleMinionsKilled"), pf.get("minionsKilled"), pf.get("currentGold"),
             ))
         for e in frame["events"]:
             if e["type"] not in KEEP_EVENTS:
                 continue
+            if e["type"] == "ITEM_PURCHASED" and not 1 <= (e.get("participantId") or 0) <= 10:
+                continue
             pos = e.get("position") or {}
             out["events"].append((
                 mid, e["timestamp"], e["type"],
-                e.get("killerId", e.get("creatorId")),
+                e.get("killerId", e.get("creatorId", e.get("participantId"))),
                 e.get("victimId"),
                 e.get("assistingParticipantIds") or [],
                 e.get("killerTeamId", e.get("teamId")),
                 e.get("monsterType"), e.get("monsterSubType"),
                 e.get("buildingType"), e.get("laneType"), e.get("wardType"),
-                pos.get("x"), pos.get("y"),
+                pos.get("x"), pos.get("y"), e.get("itemId"),
             ))
     return out

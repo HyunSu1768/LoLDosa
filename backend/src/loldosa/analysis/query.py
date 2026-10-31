@@ -307,3 +307,18 @@ class StatsDB:
     def has_rows(self, table: str, s: Scope) -> bool:
         w, p = self._w(s)
         return bool(self.rows(f"SELECT 1 FROM {table} WHERE {w} LIMIT 1", p))
+
+    # ---- 턴 (귀환·오브젝트) --------------------------------------------------
+
+    def turn_objective(self, s: Scope, objective: str) -> dict[str, dict]:
+        if not self._has("turn_objective"):
+            return {}
+        w, p = self._w(s)
+        return {r["turn"]: r for r in self.rows(
+            f"SELECT turn, games, took FROM turn_objective WHERE {w} AND objective=?", p + [objective])}
+
+    def first_recall(self, s: Scope, champ: int) -> dict | None:
+        if not self._has("first_recall"):
+            return None
+        w, p = self._w(s)
+        return self.one(f"SELECT * FROM first_recall WHERE {w} AND champion_id=?", p + [champ])

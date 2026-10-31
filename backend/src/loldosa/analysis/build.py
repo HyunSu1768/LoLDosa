@@ -19,6 +19,7 @@ import duckdb
 import pyarrow as pa
 
 from ..ddragon import ChampionIndex
+from . import turns
 from .geometry import SQL_MACROS, camps_sql_values
 
 PREP = """
@@ -145,6 +146,53 @@ SELECT gx.*,
     CASE WHEN gx.duration_s < 1500 THEN '<25' WHEN gx.duration_s < 1800 THEN '25-30'
          WHEN gx.duration_s < 2100 THEN '30-35' ELSE '35+' END AS dur_bucket
 FROM gx LEFT JOIN obj o USING (match_id);
+
+-- 상점 방문(귀환) — 규칙은 analysis/turns.py 와 같다
+CREATE TEMP TABLE visits AS
+WITH p AS (
+    SELECT match_id, participant_id AS pid, ts_ms,
+        ts_ms - lag(ts_ms) OVER (PARTITION BY match_id, participant_id ORDER BY ts_ms) AS gap
+    FROM src.events WHERE type = 'ITEM_PURCHASED' AND ts_ms >= {start_ms}
+), s AS (SELECT * FROM p WHERE gap IS NULL OR gap > {gap_ms})
+SELECT s.match_id, s.pid, s.ts_ms,
+    EXISTS (SELECT 1 FROM src.events d WHERE d.match_id = s.match_id AND d.type = 'CHAMPION_KILL'
+            AND d.victim_id = s.pid AND d.ts_ms >= s.ts_ms - {death_ms} AND d.ts_ms < s.ts_ms) AS death_back
+FROM s;
+
+-- 첫 드래곤 / 첫 유충 직전 각 팀의 '턴' 상태
+CREATE TEMP TABLE obj_turns AS
+WITH firsts AS (
+    SELECT match_id, monster_type, min(ts_ms) AS t, arg_min(team_id, ts_ms) AS taker
+    FROM src.events WHERE type = 'ELITE_MONSTER_KILL' AND monster_type IN ('DRAGON', 'HORDE')
+    GROUP BY ALL
+), teams AS (
+    SELECT f.*, tm.team_id FROM firsts f CROSS JOIN (VALUES (100), (200)) tm(team_id)
+), roles AS (
+    SELECT t.*, p.participant_id AS pid, p.position FROM teams t
+    JOIN src.participants p ON p.match_id = t.match_id AND p.team_id = t.team_id
+), v AS (
+    SELECT r.*, vi.ts_ms AS vt, vi.death_back FROM roles r
+    JOIN visits vi ON vi.match_id = r.match_id AND vi.pid = r.pid
+), flags AS (
+    SELECT t.match_id, t.monster_type, t.t, t.taker, t.team_id,
+        bool_or(v.position = 'JUNGLE' AND NOT v.death_back AND v.vt BETWEEN t.t - {setup_from} AND t.t - {setup_to}) AS jg_setup,
+        bool_or(v.position = 'JUNGLE' AND v.vt BETWEEN t.t - {late_from} AND t.t) AS jg_late
+    FROM teams t LEFT JOIN v ON v.match_id = t.match_id AND v.team_id = t.team_id AND v.monster_type = t.monster_type
+    GROUP BY ALL
+), sync AS (
+    SELECT j.match_id, j.monster_type, j.team_id, true AS synced
+    FROM v j JOIN v l ON l.match_id = j.match_id AND l.team_id = j.team_id AND l.monster_type = j.monster_type
+    WHERE j.position = 'JUNGLE' AND NOT j.death_back AND NOT l.death_back
+      AND j.vt BETWEEN j.t - {setup_from} AND j.t - {setup_to}
+      AND abs(l.vt - j.vt) <= {sync_ms}
+      AND ((j.monster_type = 'DRAGON' AND l.position IN ('BOTTOM', 'UTILITY', 'MIDDLE'))
+        OR (j.monster_type = 'HORDE' AND l.position IN ('TOP', 'MIDDLE')))
+    GROUP BY ALL
+)
+SELECT f.*, coalesce(s.synced, false) AS synced,
+    CASE WHEN f.jg_late THEN 'late' WHEN s.synced THEN 'sync' WHEN f.jg_setup THEN 'jg_only' ELSE 'none' END AS turn,
+    (f.taker = f.team_id)::INT AS took
+FROM flags f LEFT JOIN sync s USING (match_id, monster_type, team_id);
 
 -- 아군 4명 조합 성향
 CREATE TEMP TABLE ally_profile AS
@@ -329,6 +377,21 @@ SELECT sc.scope, sc.bucket, d.champ AS champion_id, d.echamp AS enemy_id,
     count(*) AS fights, sum(won) AS won
 FROM d JOIN sc USING (match_id) GROUP BY ALL""",
 
+    "turn_objective": """
+SELECT sc.scope, sc.bucket, o.monster_type AS objective, o.turn, count(*) AS games, sum(o.took) AS took
+FROM obj_turns o JOIN sc USING (match_id) GROUP BY ALL""",
+
+    "first_recall": """
+WITH f AS (
+    SELECT x.match_id, x.champ, min(v.ts_ms) AS first_ms
+    FROM g x JOIN visits v ON v.match_id = x.match_id AND v.pid = x.pid AND NOT v.death_back
+    GROUP BY ALL
+)
+SELECT sc.scope, sc.bucket, f.champ AS champion_id, count(*) AS games,
+    quantile_cont(first_ms, 0.25) / 1000 AS p25_s, quantile_cont(first_ms, 0.5) / 1000 AS median_s,
+    quantile_cont(first_ms, 0.75) / 1000 AS p75_s
+FROM f JOIN sc USING (match_id) GROUP BY ALL""",
+
     "side_transition": """
 SELECT sc.scope, sc.bucket, x.clear3, x.start_side, x.side3, x.side4, count(*) AS games
 FROM gxo x JOIN sc USING (match_id) WHERE x.start_side IS NOT NULL GROUP BY ALL""",
@@ -405,7 +468,11 @@ def build_stats(data_dir: Path, champs: ChampionIndex) -> dict[str, int]:
         con.execute("CREATE TEMP TABLE ddragon_meta AS SELECT * FROM _cm").fetchall()
         con.unregister("_cm")
         con.execute(PROFILE_SQL).fetchall()
-        con.execute(PREP.format(camps=camps_sql_values(), start_margin=START_MARGIN)).fetchall()
+        con.execute(PREP.format(
+            camps=camps_sql_values(), start_margin=START_MARGIN,
+            start_ms=turns.START_MS, gap_ms=turns.GAP_MS, death_ms=turns.DEATH_WINDOW_MS,
+            setup_from=turns.SETUP_FROM_MS, setup_to=turns.SETUP_TO_MS, late_from=turns.LATE_FROM_MS,
+            sync_ms=turns.SYNC_MS)).fetchall()
 
         counts = {}
         for name, sql in OUTPUTS.items():
