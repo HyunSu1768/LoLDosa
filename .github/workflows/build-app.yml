@@ -18,7 +18,7 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.12"
@@ -45,10 +45,12 @@ jobs:
           [ "$RUNNER_OS" = "macOS" ] && EXE=dist/LoLDosa.app/Contents/MacOS/LoLDosa
           export LOLDOSA_HOME="$RUNNER_TEMP/loldosa_home"
           "$EXE" app --browser --no-ai --port 8799 > smoke.log 2>&1 &
-          for i in $(seq 1 60); do curl -sf http://127.0.0.1:8799/api/status && break; sleep 2; done
-          curl -sf http://127.0.0.1:8799/api/status
-          cat smoke.log
-      - uses: actions/upload-artifact@v4
+          ok=0
+          for i in $(seq 1 60); do curl -sf http://127.0.0.1:8799/api/status && { ok=1; break; }; sleep 2; done
+          echo "--- smoke.log"; cat smoke.log || true
+          echo "--- loldosa.log"; cat "$LOLDOSA_HOME/data/loldosa.log" 2>/dev/null || true
+          [ "$ok" = 1 ]
+      - uses: actions/upload-artifact@v5
         with:
           name: LoLDosa-${{ runner.os }}
           path: |
