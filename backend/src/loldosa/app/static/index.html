@@ -1,156 +1,31 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LoLDosa · 정글 코치</title>
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/css/tokens.css">
+<link rel="stylesheet" href="/static/css/base.css">
+<link rel="stylesheet" href="/static/css/screens.css">
 </head>
 <body>
-<header>
-  <div class="brand">LoL<b>Dosa</b></div>
-  <nav>
-    <button class="tab active" data-tab="home">홈</button>
-    <button class="tab" data-tab="brief">게임 전 브리핑</button>
-    <button class="tab" data-tab="review">경기 복기</button>
-    <button class="tab" data-tab="learn">개념 학습</button>
-    <button class="tab" data-tab="settings">설정</button>
+<div class="app">
+  <nav class="nav" aria-label="주 메뉴">
+    <div class="brand">LoL<b>Dosa</b></div>
+    <a class="nav-item" data-href="#/home" href="#/home">
+      <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 9l7-6 7 6v8H3z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>홈</a>
+    <a class="nav-item" data-href="#/brief" href="#/brief">
+      <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="3" stroke="currentColor" stroke-width="1.8"/><path d="M7 8h6M7 12h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>게임 전 브리핑<i class="dot hidden" id="brief-dot" aria-label="챔피언 선택 중"></i></a>
+    <a class="nav-item" data-href="#/review" href="#/review">
+      <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 15l4-5 3 3 5-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>경기 복기</a>
+    <a class="nav-item" data-href="#/learn" href="#/learn">
+      <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 5l7-2 7 2v10l-7 2-7-2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M10 3v14" stroke="currentColor" stroke-width="1.8"/></svg>배우기</a>
+    <a class="nav-item" data-href="#/settings" href="#/settings">
+      <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.8"/><path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.3 4.3l1.4 1.4M14.3 14.3l1.4 1.4M4.3 15.7l1.4-1.4M14.3 5.7l1.4-1.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>설정</a>
+    <div class="nav-foot"><div class="conn" id="conn"><i></i><span>연결 확인 중</span></div></div>
   </nav>
-  <div class="pills">
-    <label class="toggle" title="문장 옆에 수치·판 수·출처를 보여줘요"><input type="checkbox" id="show-ev"> 근거 보기</label>
-    <span id="pill-lcu" class="pill">클라이언트</span>
-    <span id="pill-ws" class="pill">연결 중</span>
-  </div>
-</header>
-
-<!-- 용어 툴팁 -->
-<div id="term-tip" class="term-tip hidden"></div>
-
-<!-- ============================ 홈 ============================ -->
-<section id="tab-home" class="tabpane active">
-  <div id="onboarding" class="onboarding hidden"></div>
-  <div id="home" class="home"></div>
-</section>
-
-<!-- ============================ 브리핑 ============================ -->
-<section id="tab-brief" class="tabpane">
-  <div id="brief-idle" class="empty">
-    <div class="empty-icon">⏳</div>
-    <h2>챔피언 선택을 기다리는 중</h2>
-    <p>롤에서 랭크 게임 챔피언 선택에 들어가면 이 화면이 자동으로 채워져요.</p>
-    <div id="idle-focus"></div>
-    <p id="status-line" class="muted"></p>
-  </div>
-
-  <div id="brief" class="brief hidden">
-    <aside class="teams">
-      <div class="team-head">아군 <span id="side-badge" class="side"></span></div>
-      <ul id="allies"></ul>
-      <div class="bans" id="ally-bans"></div>
-      <div class="team-head">적군</div>
-      <ul id="enemies"></ul>
-      <div class="bans" id="enemy-bans"></div>
-      <p id="scope" class="scope"></p>
-    </aside>
-
-    <div class="brief-main">
-      <div id="ended-banner" class="banner hidden">챔피언 선택이 끝났어요 — 로딩 화면에서 아래 플랜을 한 번 더 읽어 보세요.</div>
-      <div class="stage-line"><span id="stage"></span><span id="matchup-title"></span></div>
-
-      <div id="focus-banner" class="focus-banner hidden"></div>
-      <div id="notes"></div>
-
-      <div id="picks-box" class="panel hidden">
-        <div class="panel-head"><h3>추천 픽</h3><span class="muted" id="pool-hint"></span></div>
-        <div id="picks" class="pick-row"></div>
-        <div id="picks-outside-wrap" class="hidden"><div class="sub-head">챔프폭 밖이지만 참고할 만한 픽</div><div id="picks-outside" class="pick-row small"></div></div>
-        <div id="bans-wrap" class="hidden"><div class="sub-head">추천 밴</div><div id="bans" class="pick-row small"></div></div>
-      </div>
-
-      <div id="plan-box" class="plan hidden">
-        <div class="plan-head"><h2>이번 판 플랜</h2><span class="muted">줄마다 '왜?'를 누르면 개념 설명이 나와요</span></div>
-        <ol id="plan"></ol>
-      </div>
-
-      <div id="paths-box" class="panel hidden">
-        <div class="panel-head"><h3>첫 6분 시간표</h3><span class="muted">고티어 실제 한 판의 기록이에요. 시각이 정확한 건 귀환·킬·오브젝트이고, 분마다 적힌 위치는 그 순간의 위치일 뿐 이동 경로가 아니에요.</span></div>
-        <div id="paths-styles" class="row"></div>
-        <div id="paths-table"></div>
-      </div>
-
-      <div id="ai" class="ai hidden">
-        <div class="ai-head"><span class="badge">AI 코치</span><span id="ai-headline"></span></div>
-        <ol id="ai-points"></ol>
-        <p id="ai-status" class="muted"></p>
-      </div>
-
-      <details class="more"><summary>자세한 데이터 보기 <span class="muted">(초반 정글링·갱·상성·오브젝트·조합)</span></summary>
-        <div id="cards" class="cards"></div>
-      </details>
-    </div>
-  </div>
-</section>
-
-<!-- ============================ 경기 복기 ============================ -->
-<section id="tab-review" class="tabpane">
-  <div class="review-bar">
-    <input id="riot-id" placeholder="닉네임#태그 (예: Hide on bush#KR1)">
-    <select id="review-count"><option value="5">최근 5판</option><option value="10" selected>최근 10판</option><option value="20">최근 20판</option></select>
-    <button id="review-sync" class="primary">경기 불러오기</button>
-    <span id="review-status" class="muted"></span>
-  </div>
-  <div class="review">
-    <ul id="match-list" class="match-list"></ul>
-    <div id="review-detail" class="review-detail">
-      <div class="empty small"><p>왼쪽에서 경기를 고르면 복기가 시작돼요.</p></div>
-    </div>
-  </div>
-</section>
-
-<!-- ============================ 개념 학습 ============================ -->
-<section id="tab-learn" class="tabpane">
-  <div class="learn">
-    <aside class="learn-side">
-      <input id="learn-search" placeholder="개념 검색 (예: 프리징, 역갱)">
-      <div id="learn-reco"></div>
-      <div id="learn-list"></div>
-    </aside>
-    <div id="learn-detail" class="learn-detail">
-      <div class="empty small"><h2>롤 개념 학습</h2><p>왼쪽에서 개념을 고르세요. 복기에서 지적된 개념은 위쪽 '다시 볼 개념'에 모여요.</p></div>
-    </div>
-  </div>
-</section>
-
-<!-- ============================ 설정 ============================ -->
-<section id="tab-settings" class="tabpane">
-  <div class="settings">
-    <div class="field"><label>Riot API 키 <span id="key-state" class="muted"></span></label>
-      <div class="row"><input id="set-key" placeholder="RGAPI-..." autocomplete="off"><button id="save-key" class="ghost">확인 후 저장</button></div>
-      <p class="muted">내 경기를 불러올 때만 필요해요. 게임 전 브리핑은 키 없이도 돼요.
-        <a href="https://developer.riotgames.com" target="_blank">developer.riotgames.com</a>에 롤 계정으로 로그인하면 바로 받을 수 있어요.
-        이 키는 24시간마다 만료되니, 오래 쓰려면 같은 사이트에서 'Personal API Key'를 신청하세요.</p></div>
-    <div class="field"><label>내 Riot ID</label><input id="set-riot-id" placeholder="닉네임#태그"><p class="muted">경기 복기에 써요.</p></div>
-    <div class="field"><label>비교할 티어 (갱 추천 등)</label>
-      <select id="set-bucket"><option value="platinum">플래티넘 (내 티어대)</option><option value="apex">마스터 이상</option></select>
-      </div>
-    <div class="field"><label>따라잡을 다음 티어</label>
-      <select id="set-target"><option value="emerald">에메랄드</option><option value="diamond">다이아</option><option value="apex">마스터 이상</option></select>
-      <p class="muted">복기 비교표의 '다음 티어' 칸에 쓰여요. 바로 위 티어를 고르면 따라잡을 만한 목표가 돼요.</p>
-      <p class="muted">갱처럼 상대 반응에 따라 달라지는 건 이 티어 기록을 먼저 써요. 판 수가 부족하면 마스터+ 기록을 써요.</p></div>
-    <div class="field"><label><input type="checkbox" id="set-ai"> AI 코치 사용 (Claude 구독)</label></div>
-    <div class="field">
-      <label>내 정글 챔프폭 <span id="pool-count" class="muted"></span></label>
-      <p class="muted">고르면 추천 픽이 이 안에서 나오고, 폭 밖에서 확실히 나은 챔피언만 '참고'로 따로 보여줘요.</p>
-      <input id="champ-search" placeholder="챔피언 검색">
-      <div id="champ-grid" class="champ-grid"></div>
-    </div>
-    <button id="save-settings" class="primary">저장</button> <span id="settings-status" class="muted"></span>
-    <div class="field" style="margin-top:28px"><label>문제가 생겼을 때</label>
-      <p class="muted">챔피언 선택 화면이 안 잡히거나 자동 복기가 안 되면, 아래 진단 기록을 받아서 보내 주세요. 실제 클라이언트 응답과 게임 단계 기록이 들어 있어요. 비밀번호나 API 키는 들어 있지 않아요.</p>
-      <a class="ghost button-link" href="/api/diagnostics" download>진단 기록 내려받기 (zip)</a></div>
-  </div>
-</section>
-
-<script src="/static/app.js"></script>
+  <main class="main" id="view" tabindex="-1"></main>
+</div>
+<script type="module" src="/static/js/main.js"></script>
 </body>
 </html>

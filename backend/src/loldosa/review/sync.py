@@ -22,7 +22,7 @@ async def resolve_puuid(riot: RiotClient, riot_id: str) -> str:
     name, tag = split_riot_id(riot_id)
     acc = await riot.account_by_riot_id(name, tag)
     if not acc or not acc.get("puuid"):
-        raise ValueError(f"'{riot_id}' 계정을 찾지 못했습니다. 닉네임과 태그를 확인하세요.")
+        raise ValueError(f"'{riot_id}' 계정을 찾지 못했어요. 닉네임과 태그를 확인해 주세요.")
     return acc["puuid"]
 
 

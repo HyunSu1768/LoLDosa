@@ -28,7 +28,7 @@ REGION_KO = {"own_jungle": "우리 정글", "enemy_jungle": "상대 정글", "ri
 POS_KO = {"TOP": "탑", "JUNGLE": "정글", "MIDDLE": "미드", "BOTTOM": "원딜", "UTILITY": "서폿", "": "?"}
 OBJ_KO = {"DRAGON": "드래곤", "HORDE": "공허 유충", "RIFTHERALD": "전령", "BARON_NASHOR": "바론",
           "ATAKHAN": "아타칸"}
-FAR = 5000  # 오브젝트에서 이 거리보다 멀면 '합류 못 함'
+FAR = 5000  # 오브젝트에서 이 거리보다 멀면 '합류하지 못했어요'
 
 
 @dataclass
@@ -254,7 +254,7 @@ class Reviewer:
         f3 = self.frames.get(pid, {}).get(3)
         if f3 and me["position"] == "JUNGLE":
             camps = (f3["jcs"] or 0) // 4
-            out.append(Moment(180, "clear", f"3:00까지 {camps}캠프 먹음, 위치: {REGION_KO[relative_region(team, f3['x'], f3['y'])]}",
+            out.append(Moment(180, "clear", f"3:00까지 {camps}캠프를 먹었고, 그때 위치는 {REGION_KO[relative_region(team, f3['x'], f3['y'])]}예요",
                               f3["x"], f3["y"]))
         for e in events:
             if e["ts_ms"] > 15 * 60000:
@@ -267,8 +267,8 @@ class Reviewer:
                 if e["victim_id"] == pid:
                     killers = [self.by_pid[k] for k in [e["participant_id"], *(e["assists"] or [])] if k in self.by_pid]
                     with_jg = ejg and any(k["participant_id"] == ejg["participant_id"] for k in killers)
-                    out.append(Moment(t, "death", f"{mmss(t)} {where}에서 죽음"
-                                      + (f" (상대 정글 {self.name(ejg['champion_id'])} 낌)" if with_jg else ""),
+                    out.append(Moment(t, "death", f"{mmss(t)} {where}에서 죽었어요"
+                                      + (f" (상대 정글 {josa(self.name(ejg['champion_id']), '이가')} 같이 있었어요)" if with_jg else ""),
                                       e["x"], e["y"], False))
                 elif self.involved(e, pid):
                     out.append(Moment(t, "kill" if e["participant_id"] == pid else "assist",
@@ -285,7 +285,7 @@ class Reviewer:
                 obj = OBJ_KO.get(e["monster_type"], e["monster_type"])
                 p = self.pos_at(pid, e["ts_ms"])
                 d = _dist(p, (e["x"], e["y"]))
-                out.append(Moment(t, "objective", f"{mmss(t)} {'우리' if ours else '적'} 팀 {obj} 먹음"
+                out.append(Moment(t, "objective", f"{mmss(t)} {'우리' if ours else '상대'} 팀이 {josa(obj, '을를')} 가져갔어요"
                                   + (f" — 나와의 거리 {d:,.0f}" if d != float("inf") else ""), e["x"], e["y"], ours))
         for v in self.visits:
             if v.ts_ms > 15 * 60000 or v.death_back:
@@ -328,11 +328,11 @@ class Reviewer:
             verdict = "good" if camps3 >= 6 else ("bad" if camps3 <= 3 and not early_lane and (full or 0) >= 0.4
                                                   else "neutral")
             ev = metric("3:00까지 먹은 캠프", f"{camps3}캠프", f"풀캠 {pct(full)}" if full is not None else "-", verdict,
-                        f"3:00 정글 CS {fr[3]['jcs']} → {camps3}캠프 먹음",
+                        f"3:00 정글 CS {fr[3]['jcs']}, 캠프 {camps3}개를 먹었어요",
                         f"{cname} 3:00까지 풀캠한 비율 {pct(full)} (n={tot})" if tot else None, tot)
             if verdict == "bad":
                 rv.lessons.append(Lesson(
-                    "초반 정글링이 느렸음",
+                    "초반 정글링이 느렸어요",
                     f"3:00에 {camps3}캠프였고, 그 전에 킬관여도 없었어요. 고티어 {josa(cname)} {pct(full)}가 3분 안에 풀캠을 해요. "
                     f"첫 동선에서 캠프를 빠뜨리지 말고, 일찍 빠질 거면 확실한 갱 각이 있을 때만 빠지세요.", 2, ev))
             elif verdict == "good":
@@ -348,7 +348,7 @@ class Reviewer:
             ev = metric("10분 정글 CS", f"{mine10}", f"{avg10:.0f}", verdict, f"10분 정글 몬스터 CS {mine10}",
                         f"{cname} 10분 평균 정글 CS {avg10:.1f} (n={n})", n)
             if verdict == "bad":
-                rv.lessons.append(Lesson("10분까지 정글 몬스터를 덜 먹었음",
+                rv.lessons.append(Lesson("10분까지 정글 몬스터를 덜 먹었어요",
                                          f"10분 정글 CS {mine10}로 고티어 평균({avg10:.0f})의 {r * 100:.0f}%예요. "
                                          f"갱·싸움 사이사이 리젠된 캠프를 놓치지 말고 챙기세요.", 1 if me["win"] else 2, ev))
 
@@ -366,7 +366,7 @@ class Reviewer:
                             f"10분 골드 차(vs 상대 정글 {self.name(ejg['champion_id'])}) {signed(gd10)}",
                             f"{cname} {label} 10분 정글 골드 차 평균 {signed(base)} (n={bn})", bn)
                 if verdict == "bad":
-                    rv.lessons.append(Lesson("10분 정글 골드 차이가 컸음",
+                    rv.lessons.append(Lesson("10분 정글 골드가 많이 밀렸어요",
                                              f"10분에 상대 정글보다 {abs(gd10):,.0f} 골드 밀렸어요(고티어 평균 {signed(base)}). "
                                              f"아래 데스·오브젝트 장면부터 확인하세요.", 2, ev))
                 elif verdict == "good":
@@ -390,7 +390,7 @@ class Reviewer:
             where = relative_region(team, e["x"], e["y"])
             with_jg = ejg and self.involved(e, ejg["participant_id"])
             t = e["ts_ms"] / 1000
-            text = f"{mmss(t)} {REGION_KO[where]}에서 죽었어요" + (" (상대 정글 낌)" if with_jg else "") + ". "
+            text = f"{mmss(t)} {REGION_KO[where]}에서 죽었어요" + (" (상대 정글이 같이 있었어요)" if with_jg else "") + ". "
             ev = [self.mine(f"{mmss(t)} {REGION_KO[where]} 데스, 상대 정글 낌: {'예' if with_jg else '아니오'}")]
             if ejg and 150 <= t <= 300:
                 sides = self.stats.sides(s, ejg["champion_id"], ejg["team_id"])
@@ -411,7 +411,7 @@ class Reviewer:
                 text += "상대 정글이나 강가에서 죽었다면, 들어가기 전에 미니맵으로 상대 정글과 라인에 안 보이는 적부터 확인하세요."
             else:
                 text += "죽기 직전 상황을 리플레이로 확인해 보세요."
-            rv.lessons.append(Lesson(f"{mmss(t)} 데스", text, 3 if t < 600 else 2, ev))
+            rv.lessons.append(Lesson(f"{mmss(t)}에 죽었어요", text, 3 if t < 600 else 2, ev))
 
         # 5) 적 정글 갱을 막지 못한 순간 (10분 전, 아군 사망 + 적 정글 관여, 내가 멀리 있음)
         if ejg:
@@ -430,14 +430,14 @@ class Reviewer:
                 t = e["ts_ms"] / 1000
                 same_side = map_side(*p) == map_side(e["x"], e["y"])
                 ev = [self.mine(f"{mmss(t)} 상대 {josa(self.name(ejg['champion_id']), '이가')} {REGION_KO[lane]}에서 아군 "
-                                f"{self.name(victim['champion_id'])} 킬에 낌, 그때 내 위치 "
+                                f"{self.name(victim['champion_id'])} 킬에 같이했어요. 그때 내 위치는 "
                                 f"{REGION_KO[relative_region(team, *p)]}")]
                 rv.facts["enemy_ganks10"] = sum(
                     1 for x in events if x["type"] == "CHAMPION_KILL" and x["ts_ms"] < 600000
                     and self.by_pid.get(x["victim_id"], {}).get("team_id") == team and x["victim_id"] != pid
                     and self.involved(x, ejg["participant_id"]) and region(x["x"], x["y"]) in ("top", "mid", "bot"))
                 rv.lessons.append(Lesson(
-                    f"{mmss(t)} {REGION_KO[lane]} 갱 당함",
+                    f"{mmss(t)} {REGION_KO[lane]}에서 갱을 당했어요",
                     f"상대 {josa(self.name(ejg['champion_id']), '이가')} {mmss(t)}에 {REGION_KO[lane]}에서 아군 "
                     f"{josa(self.name(victim['champion_id']), '을를')} 잡았고, 그때 나는 {REGION_KO[relative_region(team, *p)]}"
                     f"({'같은' if same_side else '반대'} 사이드)에 있었어요. "
@@ -469,19 +469,19 @@ class Reviewer:
                 rv.facts["far_lost"] = rv.facts.get("far_lost", 0) + 1
                 med = {"DRAGON": times.get("first_dragon_median_s"), "HORDE": times.get("first_grub_median_s"),
                        "RIFTHERALD": times.get("herald_median_s")}.get(e["monster_type"])
-                ev = [self.mine(f"{mmss(t)} 상대 팀 {obj} 먹음, 그때 나와의 거리 {d:,.0f}")]
+                ev = [self.mine(f"{mmss(t)} 상대 팀이 {josa(obj, '을를')} 가져갔어요. 그때 나와의 거리는 {d:,.0f}이에요")]
                 if med:
                     ev.append(self.bench(f"첫 {obj} 보통 잡는 시각(중앙값) {mmss(med)} (n={times.get('matches')})",
                                          times.get("matches")))
                 rv.lessons.append(Lesson(
-                    f"{mmss(t)} {obj} 합류 못 하고 내줌",
+                    f"{mmss(t)} {josa(obj, '을를')} 합류 못 하고 내줬어요",
                     f"상대가 {josa(obj, '을를')} 가져갈 때 나는 {d:,.0f} 거리(맵 약 {d / 14870 * 100:.0f}%)에 있었어요. "
                     + (f"고티어 기준 첫 {josa(obj)} 보통 {mmss(med)}쯤 잡히니, 1분 전에 귀환하고 근처 라인 주도권을 잡은 뒤 자리 잡았어야 해요."
                        if med else "오브젝트 나오기 1분 전에는 귀환해서 정비하고 근처에 있어야 해요.")
                     + " 반대편에서 얻은 것(포탑·오브젝트·킬)도 없었어요.",
                     3, ev))
             elif ours:
-                ev = [self.mine(f"{mmss(t)} 우리 팀 {obj} 먹음")]
+                ev = [self.mine(f"{mmss(t)} 우리 팀이 {josa(obj, '을를')} 가져갔어요")]
                 rv.strengths.append(Lesson(f"{mmss(t)} {obj} 획득", f"{josa(obj, '을를')} 챙겼어요.", 1, ev))
 
         # 7) 시야·카정·킬관여율
@@ -496,7 +496,7 @@ class Reviewer:
                             f"시야 점수 {me['vision_score']} / {rv_minutes:.0f}분",
                             f"{cname} 평균 분당 시야 점수 {c['vision_pm']:.2f} (n={n})", n)
                 if verdict == "bad":
-                    rv.lessons.append(Lesson("시야 작업 부족",
+                    rv.lessons.append(Lesson("시야 작업이 부족했어요",
                                              f"분당 시야 점수 {vpm:.2f}로 고티어 평균({c['vision_pm']:.2f})보다 낮아요. "
                                              f"오브젝트 1분 전 와드와 제어 와드(이번 판 {me['control_wards']}개, "
                                              f"평균 {c['control_wards']:.1f}개)를 늘리세요.", 1, ev))
@@ -529,7 +529,7 @@ class Reviewer:
                                      d[band]["fights"])]
                     if not won and rate < 0.45:
                         rv.facts["bad_band_fight"] = True
-                        rv.lessons.append(Lesson(f"{mmss(t)} 레벨 불리할 때 싸움",
+                        rv.lessons.append(Lesson(f"{mmss(t)} 레벨이 불리할 때 싸웠어요",
                                                  f"{BAND_KO[band]}에 상대 정글과 싸워서 졌어요. 고티어 {cname}도 이 레벨대 정글 1:1 승률이 "
                                                  f"{pct(rate)}로 낮은 편이라, 이 레벨대엔 싸우지 말고 파밍했어야 해요.", 2, ev))
 
@@ -569,7 +569,7 @@ class Reviewer:
             name = TURN_OBJ_KO[obj]
             t = e["ts_ms"] / 1000
             lo, hi = mmss(t - SETUP_FROM_MS / 1000), mmss(t - SETUP_TO_MS / 1000)
-            ev = [self.mine(f"{name} {mmss(t)}에 {'우리' if took else '상대'} 팀이 처음 먹음, 그 직전 우리 팀 상태: {TURN_KO[turn]}")]
+            ev = [self.mine(f"{name}: {mmss(t)}에 {'우리' if took else '상대'} 팀이 처음 가져갔어요. 그 직전 우리 팀은 '{TURN_KO[turn]}'였어요")]
             prep = [stats[k] for k in ("sync", "jg_only") if k in stats]
             pg = sum(r["games"] for r in prep)
             if pg and "none" in stats and "late" in stats:
@@ -583,14 +583,14 @@ class Reviewer:
                 prep_rate = none_rate = late_rate = None
             if turn == "late":
                 rv.lessons.append(Lesson(
-                    f"{mmss(t)} {name} 직전에 귀환 중",
+                    f"{mmss(t)} {name} 직전에 귀환하고 있었어요",
                     f"{josa(name, '이가')} {mmss(t)}에 잡혔는데, 그 직전 30초 안에 나는 귀환해서 본진에 있었어요."
                     + (f" 고티어에서 이런 팀이 가져간 비율은 {pct(late_rate)}뿐이에요." if late_rate is not None else "")
                     + f" {lo}~{hi} 사이에 미리 귀환해서 정비하고 자리를 잡았어야 해요.", 3, ev))
             # '미리 귀환 안 함'은 지적하지 않는다: 프로·챌린저·플래티넘 모두 40% 안팎만 미리 귀환했고
             # 프로 경기에선 미리 귀환한 팀(62%)과 안 한 팀(63%)의 획득률이 같았다 (research_notes/검증/검증 결과.md).
             elif turn in ("sync", "jg_only") and took:
-                rv.strengths.append(Lesson(f"{name} 전 귀환 타이밍 좋음", f"{lo}~{hi}에 미리 귀환해서 {josa(name, '을를')} 가져갔어요.",
+                rv.strengths.append(Lesson(f"{name} 전 귀환 타이밍", f"{lo}~{hi}에 미리 귀환해서 {josa(name, '을를')} 가져갔어요.",
                                            1, ev))
 
         for e in events:
@@ -602,7 +602,7 @@ class Reviewer:
                 rv.facts["gold_death"] = cur
                 t = e["ts_ms"] / 1000
                 rv.lessons.append(Lesson(
-                    f"{mmss(t)} 골드 들고 죽음",
+                    f"{mmss(t)}에 골드를 들고 죽었어요",
                     f"죽기 직전({int(e['ts_ms'] // 60000)}:00)에 안 쓴 골드를 {cur:,}골드나 들고 있었어요. "
                     f"이만큼 모였으면 싸우기 전에 먼저 귀환해서 템부터 샀어야 해요.", 2,
                     [self.mine(f"{int(e['ts_ms'] // 60000)}:00 보유 골드 {cur:,}, {mmss(t)} 데스")]))
@@ -616,14 +616,14 @@ TURN_OBJ_KO = {"DRAGON": "첫 드래곤", "HORDE": "공허 유충"}
 LESSON_CONCEPTS = [
     ("직전에 귀환", ["recall-timing", "turn-tempo", "objective-setup"]),
     ("귀환 타이밍", ["recall-timing", "turn-tempo", "objective-setup"]),
-    ("골드 들고", ["recall-timing"]),
+    ("골드를 들고", ["recall-timing"]),
     ("정글링", ["full-clear", "jungle-pathing", "clear-efficiency"]),
     ("풀캠", ["full-clear", "jungle-pathing", "clear-efficiency"]),
     ("정글 몬스터", ["clear-efficiency", "jungle-pathing"]),
-    ("데스", ["jungle-tracking", "vision-control", "invading"]),
-    ("갱 당함", ["counter-gank", "jungle-tracking", "cross-map"]),
-    ("합류 못 하고 내줌", ["objective-setup", "turn-tempo", "cross-map"]),
-    ("레벨 불리", ["power-spikes"]),
+    ("죽었어요", ["jungle-tracking", "vision-control", "invading"]),
+    ("갱을 당했어요", ["counter-gank", "jungle-tracking", "cross-map"]),
+    ("합류 못 하고 내줬어요", ["objective-setup", "turn-tempo", "cross-map"]),
+    ("레벨이 불리", ["power-spikes"]),
     ("시야", ["vision-control"]),
     ("정글 골드", ["ganking", "clear-efficiency"]),
     ("획득", ["objective-setup"]),

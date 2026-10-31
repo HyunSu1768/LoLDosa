@@ -63,18 +63,18 @@ def snapshot(md, champs: ChampionIndex, pid: int, epid: int, team: int, m: int, 
     objs = []
     if st["to_dragon"] < 999:
         objs.append({"name": "드래곤", "x": PIT["dragon"][0], "y": PIT["dragon"][1],
-                     "text": "지금 있음" if st["to_dragon"] == 0 else f"{mmss(st['to_dragon'])} 뒤"})
+                     "text": "지금 있어요" if st["to_dragon"] == 0 else f"{mmss(st['to_dragon'])} 뒤"})
     if st["to_grub"] < 999:
         objs.append({"name": "유충", "x": PIT["baron"][0], "y": PIT["baron"][1],
-                     "text": "지금 있음" if st["to_grub"] == 0 else f"{mmss(st['to_grub'])} 뒤"})
+                     "text": "지금 있어요" if st["to_grub"] == 0 else f"{mmss(st['to_grub'])} 뒤"})
     elif st["to_herald"] < 999:
         objs.append({"name": "전령", "x": PIT["baron"][0], "y": PIT["baron"][1],
-                     "text": "지금 있음" if st["to_herald"] == 0 else f"{mmss(st['to_herald'])} 뒤"})
+                     "text": "지금 있어요" if st["to_herald"] == 0 else f"{mmss(st['to_herald'])} 뒤"})
     facts = [
         f"내 위치: {REGION_KO.get(st['region'], st['region'])} · 체력 {round(st['hp'] * 100)}% · 가진 골드 {int(st['gold']):,}",
         f"상대 정글과: 레벨 {signed(st['level_diff'])} · 골드 {signed(st['gold_diff'])} · 상대 정글 실제 위치는 {'탑' if st['enemy_side_top'] else '봇'} 쪽(그때 보였는지는 시야에 따라 달라요)",
         f"라인 골드 차이(우리-상대): 탑 {signed(st['lane_top'])} · 미드 {signed(st['lane_mid'])} · 봇 {signed(st['lane_bot'])}",
-        "오브젝트: " + (", ".join(f"{o['name']} {o['text']}" for o in objs) if objs else "당분간 없음")
+        "오브젝트: " + (", ".join(f"{o['name']} {o['text']}" for o in objs) if objs else "당분간 없어요")
         + (f" · 용 개수 차이 {signed(st['dragon_diff'])}" if st["dragon_diff"] else ""),
     ]
     lanes = {"top": st["lane_top"], "mid": st["lane_mid"], "bot": st["lane_bot"]}

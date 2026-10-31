@@ -1,0 +1,103 @@
+/* 화면별 스타일 */
+.back { display: inline-block; color: var(--grey600); font-size: var(--t6); margin-bottom: var(--s5); }
+.back:hover { color: var(--grey900); }
+.plain { margin: var(--s2) 0 0; padding-left: 20px; color: var(--grey700); }
+.plain li { margin: 6px 0; line-height: 1.6; }
+.plain.big li { font-size: var(--t5); margin: 10px 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.fold { margin-top: var(--s8); color: var(--grey600); }
+.fold summary { cursor: pointer; font-weight: 600; }
+.tag { display: inline-block; font-size: 12px; font-weight: 700; color: var(--grey600); white-space: nowrap; }
+.row .lead .tag { font-size: 11px; }
+
+/* ---------- 브리핑 ---------- */
+.brief-grid { display: grid; grid-template-columns: 240px 1fr; gap: var(--s10); }
+.teams { position: sticky; top: var(--s10); align-self: start; }
+.side { display: inline-block; font-size: var(--t7); font-weight: 700; padding: 4px 10px; border-radius: 8px; margin-bottom: var(--s3); }
+.side.blue { background: var(--blue-weak); color: var(--blue-text); } .side.red { background: var(--red-weak); color: var(--red-text); }
+.tm-list { list-style: none; margin: 0; padding: 0; }
+.tm { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 8px; border-radius: 10px; }
+.tm.me { background: var(--bg-layer); } .tm.picking { box-shadow: inset 0 0 0 1px var(--blue); }
+.tm-pos { width: 28px; font-size: 12px; color: var(--grey500); }
+.tm-img { width: 30px; height: 30px; border-radius: 8px; background: var(--bg-float); overflow: hidden; flex: none; }
+.tm-img img { width: 100%; height: 100%; }
+.tm-name { color: var(--grey800); font-weight: 600; font-size: var(--t6); } .tm-name.hover { color: var(--grey500); font-style: italic; }
+.brief-title { font-size: var(--t1); line-height: var(--t1-lh); color: var(--grey900); margin: 4px 0 0; letter-spacing: -0.02em; }
+.brief-title .vs { color: var(--grey500); font-weight: 500; font-size: var(--t4); }
+.brief-hero { font-size: var(--t3); line-height: var(--t3-lh); font-weight: 700; color: var(--grey900); letter-spacing: -0.01em; }  /* B1 결론 22px 이상 */
+.pick-hero { display: flex; gap: var(--s5); align-items: center; }
+.pick-hero img { width: 72px; height: 72px; border-radius: 20px; }
+.warn-row { margin-top: var(--s3); padding: 14px var(--s6); border-radius: var(--r-card); background: var(--yellow-weak); color: var(--grey900); }
+.warn-row b { color: var(--yellow); margin-right: 8px; }
+.practice-row { margin-top: var(--s5); color: var(--grey800); display: flex; gap: 10px; align-items: center; }
+.tl { list-style: none; padding: 0; margin: 0; }
+.tl li { display: flex; gap: var(--s3); padding: 8px 0; border-bottom: 1px solid rgba(255, 255, 255, .05); color: var(--grey700); }
+.tl li.good { color: var(--green-text); } .tl li.bad { color: var(--red-text); }
+.tl-t { width: 44px; flex: none; color: var(--grey500); } .tl-t.strong { color: var(--yellow); font-weight: 700; }
+.tl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s6); }
+.card ul.plain li.inference { color: var(--grey600); }
+
+/* ---------- 복기 ---------- */
+.rv-head { display: flex; align-items: center; gap: var(--s4); }
+.rv-head > img { width: 56px; height: 56px; border-radius: 16px; }
+.rv-focus { margin-left: auto; }
+.moment .mo-grid, .mo-grid { display: grid; grid-template-columns: 300px 1fr; gap: var(--s6); margin-top: var(--s3); align-items: start; }
+.choices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.choice { min-height: 48px; padding: 10px 14px; border-radius: var(--r-l); border: 0; background: var(--bg-float); color: var(--grey900); font-weight: 600;
+  cursor: pointer; text-align: left; transition: transform .15s var(--ease-back), background-color var(--dur); }
+.choice:active { transform: scale(.96); }
+.choice:disabled { cursor: default; opacity: .55; }
+.choice.right { background: var(--green-weak); color: var(--green-text); opacity: 1; }
+.choice.wrong { background: var(--red-weak); color: var(--red-text); opacity: 1; }
+@media (hover: hover) and (pointer: fine) { .choice:not(:disabled):hover { background: var(--grey200); } }
+.verdict { margin-top: var(--s4); font-weight: 700; font-size: var(--t5); } .verdict.good { color: var(--green-text); } .verdict.bad { color: var(--red-text); }
+.crowd { display: grid; grid-template-columns: 110px 1fr 44px 120px; gap: 10px; align-items: center; font-size: var(--t7); margin: 6px 0; color: var(--grey700); }
+.crowd .bar { height: 6px; } .crowd.picked { color: var(--grey900); font-weight: 700; }
+.steps3 { list-style: none; padding: 0; margin: var(--s5) 0; display: grid; gap: 10px; }
+.steps3 li { color: var(--grey500); padding-left: 28px; position: relative; font-weight: 600; }
+.steps3 li::before { content: ""; position: absolute; left: 0; top: 3px; width: 16px; height: 16px; border-radius: 8px; background: var(--grey200); }
+.steps3 li.on { color: var(--grey900); } .steps3 li.on::before { background: var(--blue); animation: sk 1s infinite alternate; }
+.steps3 li.done { color: var(--grey700); } .steps3 li.done::before { background: var(--green); }
+
+/* 상황판 */
+.board-wrap { margin: 0; }
+svg.board { width: 100%; height: auto; display: block; }
+svg.board .bg { fill: var(--bg-sunken); }
+svg.board .lane { fill: none; stroke-width: 10; stroke-linecap: round; stroke-linejoin: round; opacity: .5; }
+svg.board .lane.win { stroke: var(--green); } svg.board .lane.lose { stroke: var(--red); } svg.board .lane.even { stroke: var(--grey300); }
+svg.board .river { stroke: #2b5d8a; stroke-width: 14; opacity: .3; stroke-linecap: round; }
+svg.board text { font: 11px var(--font); fill: var(--grey600); }
+svg.board .lbl { font-weight: 700; } svg.board .lbl.win { fill: var(--green-text); } svg.board .lbl.lose { fill: var(--red-text); }
+svg.board .obj { fill: var(--yellow); font-weight: 800; }
+svg.board .tok circle { stroke: #000; stroke-width: 1; }
+svg.board .tok.me circle { fill: var(--yellow); } svg.board .tok.me text { fill: var(--yellow); font-weight: 800; font-size: 12px; }
+svg.board .tok.ejg circle { fill: var(--red); } svg.board .tok.ejg text { fill: var(--red-text); font-weight: 800; font-size: 12px; }
+svg.board .tok.ally circle { fill: var(--blue); } svg.board .tok.ally text { fill: var(--blue-text); font-size: 10px; }
+svg.board .tok.enemy circle { fill: var(--red-text); opacity: .7; } svg.board .tok.enemy text { fill: var(--grey500); font-size: 10px; }
+.board-wrap figcaption { margin-top: 6px; }
+
+/* ---------- 배우기 ---------- */
+.mini-bar { width: 72px; height: 6px; background: var(--bg-float); border-radius: 3px; overflow: hidden; }
+.mini-bar i { display: block; height: 100%; } .mini-bar i.g { background: var(--green); } .mini-bar i.y { background: var(--yellow); } .mini-bar i.r { background: var(--red); }
+.dots { display: flex; gap: 6px; margin: 14px 0 6px; }
+.dots .d { width: 14px; height: 14px; border-radius: 7px; background: var(--grey300); }
+.dots .d.pass { background: var(--green); } .dots .d.fail { background: var(--red); }
+
+/* ---------- 설정 ---------- */
+label.row { cursor: pointer; }
+.champ-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; max-height: 46vh; overflow: auto; padding: 2px; }
+.champ { display: grid; justify-items: center; gap: 4px; padding: 8px 4px; border-radius: 12px; border: 0; background: var(--bg-layer); cursor: pointer; color: var(--grey700); font-size: 12px; }
+.champ img { width: 44px; height: 44px; border-radius: 12px; }
+.champ.on { background: var(--blue-weak); color: var(--blue-text); box-shadow: inset 0 0 0 2px var(--blue); }
+
+/* ---------- 게임 끝 알림 ---------- */
+#postgame { position: fixed; right: 24px; bottom: 24px; z-index: 40; width: 360px; }
+.pg { position: relative; background: var(--bg-float); border-radius: 20px; padding: var(--s5); box-shadow: 0 12px 40px rgba(0, 0, 0, .5); animation: rise .35s var(--ease); }
+.pg .close { position: absolute; top: 12px; right: 12px; width: 28px; height: 28px; border-radius: 14px; border: 0; background: var(--grey100); color: var(--grey600); cursor: pointer; }
+
+@media (max-width: 960px) {
+  .app { grid-template-columns: 72px 1fr; }
+  .nav .brand, .nav-item { font-size: 0; } .nav-item { justify-content: center; } .nav-foot span { display: none; }
+  .brief-grid { grid-template-columns: 1fr; } .teams { position: static; }
+  .mo-grid, .moment .mo-grid { grid-template-columns: 1fr; } .tl-grid { grid-template-columns: 1fr; }
+}

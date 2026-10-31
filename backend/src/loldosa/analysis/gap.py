@@ -81,13 +81,13 @@ FEATURES: list[Feature] = [
             "레벨·아이템 앞설 때 상대 정글 캠프에서 1:1 걸기", "{:.1f}"),
     Feature("pings_pm", "분당 핑 사용", "회", "communication-pings",
             "상대 정글 위치·오브젝트 타이밍을 핑으로 알리기", "{:.2f}"),
-    Feature("missing_pings", "미아 핑 (상대 사라짐)", "회", "communication-pings",
+    Feature("missing_pings", "미아 핑 (상대가 사라졌을 때)", "회", "communication-pings",
             "상대 정글·라이너가 안 보이면 바로 미아 핑", "{:.1f}"),
     Feature("omw_pings", "'가는 중' 핑", "회", "communication-pings",
             "갱·오브젝트 가기 전에 '가는 중' 핑으로 라이너 준비시키기", "{:.0f}"),
     Feature("getback_pings", "'후퇴' 핑", "회", "communication-pings",
             "상대 정글이 보이면 그쪽 라이너에게 '후퇴' 핑", "{:.1f}"),
-    Feature("vision_pings", "'적 시야' 핑 (와드 위치 알림)", "회", "communication-pings",
+    Feature("vision_pings", "'적 시야' 핑 (와드 위치 알리기)", "회", "communication-pings",
             "상대 와드 발견하면 핑 찍고 지우기", "{:.1f}"),
 ]
 # 상대 정글과의 차이는 같은 티어끼리 붙은 값이라 티어 비교에 못 쓴다 (마스터+ 끼리는 평균 0). 기준표 검증에서 뺀다.

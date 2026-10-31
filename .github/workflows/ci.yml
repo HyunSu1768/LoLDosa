@@ -20,6 +20,8 @@ jobs:
       - run: uv sync --extra dev
       - name: Unit tests
         run: uv run pytest -q
+      - name: Copy lint (해요체·명사형 종결·화살표 문장 금지, docs/DESIGN.md §3)
+        run: uv run python scripts/lint_copy.py --strict
       - name: End-to-end with fake League client
         run: |
           GID=$(uv run python scripts/make_e2e_fixture.py "$RUNNER_TEMP/e2e" | tail -1)

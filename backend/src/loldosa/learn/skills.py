@@ -35,7 +35,7 @@ def _turn(f):
     t = (f.get("obj_turns") or {}).get("DRAGON")
     if not t:
         return "na", "20분 전에 드래곤 안 잡힘"
-    label = {"sync": "라이너와 같이 미리 귀환", "jg_only": "미리 귀환", "none": "미리 귀환 안 함",
+    label = {"sync": "라이너와 같이 미리 귀환", "jg_only": "미리 귀환", "none": "미리 귀환하지 않았어요",
              "late": "직전 30초 안에 귀환"}[t["turn"]]
     return ("pass" if t["turn"] in ("sync", "jg_only") else "fail"), f"첫 드래곤 전: {label}"
 
@@ -45,12 +45,12 @@ def _recall(f):
     (오브젝트 직전 귀환은 프로 8%·챌린저 15%·플래티넘 14%로 차이가 없어서 뺐다)"""
     fr = f.get("first_recall_s")
     if f.get("gold_death"):
-        return "fail", f"골드 {f['gold_death']:,} 들고 죽음"
+        return "fail", f"골드 {f['gold_death']:,}를 들고 죽었어요"
     if fr is None:
         return "na", "-"
     if fr > 300:
-        return "fail", f"첫 귀환 {_mmss(fr)} (5:00 넘김)"
-    return "pass", f"첫 귀환 {_mmss(fr)}, 골드 들고 안 죽음"
+        return "fail", f"첫 귀환 {_mmss(fr)} (5:00을 넘겼어요)"
+    return "pass", f"첫 귀환 {_mmss(fr)}, 골드를 들고 죽지 않았어요"
 
 
 def _objective(f):
@@ -89,7 +89,7 @@ def _power(f):
     if "camps3" not in f:
         return "na", "-"
     return ("fail" if f.get("bad_band_fight") else "pass"), (
-        "레벨 불리할 때 정글 싸움에서 짐" if f.get("bad_band_fight") else "레벨 불리할 때 정글 싸움에서 안 짐")
+        "레벨이 불리할 때 정글 싸움에서 졌어요" if f.get("bad_band_fight") else "레벨이 불리할 때 정글 싸움에서 지지 않았어요")
 
 
 CHECKS = {

@@ -239,7 +239,7 @@ class BriefingEngine:
                 eid = self.ev.add(f"프로 대회 {self.name(cid)} 정글 {pro['games']}경기, 승률 "
                                   f"{pct(pro['wins'] / pro['games'])}, 선수 {pro['players']}명 ({pro['leagues']})",
                                   SRC_PRO, pro["games"], confidence(pro["games"]))
-                rec.reasons.append(Item(f"프로 대회 {pro['games']}경기 승률 {pct(pro['wins'] / pro['games'])} (참고용, 추천 점수엔 안 넣음)",
+                rec.reasons.append(Item(f"프로 대회 {pro['games']}경기 승률 {pct(pro['wins'] / pro['games'])} (참고용이라 추천 점수엔 넣지 않았어요)",
                                         "fact", [eid]))
             out.append(rec)
         return out
@@ -340,11 +340,11 @@ class BriefingEngine:
                     card.add(f"고티어 {josa(self.name(champ))} 대부분 3분 안에 풀캠을 하고, 그 뒤 바위게(2:55 등장)나 "
                              f"라인으로 가요.", e2, kind="inference")
                 elif share["three_or_less"] >= 0.35:
-                    card.headline = f"{self.name(champ)}: 3캠만 먹고 일찍 갱 가는 판이 많음 ({pct(share['three_or_less'])})"
+                    card.headline = f"{self.name(champ)}: 3캠만 먹고 일찍 갱을 가는 판이 많아요 ({pct(share['three_or_less'])})"
                     card.add(f"고티어 {josa(self.name(champ))} 3캠만 먹고 갱이나 카정을 가는 판이 많아요.",
                              e2, kind="inference")
                 else:
-                    card.headline = f"{self.name(champ)}: 풀캠·3캠 갱 섞어서 씀 (풀캠 {pct(share['full_clear'])})"
+                    card.headline = f"{self.name(champ)}: 풀캠·3캠 갱 섞어서 써요 (풀캠 {pct(share['full_clear'])})"
             else:
                 card.headline = f"{self.name(champ)}: 초반 정글링 데이터 부족 (n={tot})"
         if enemy_jg:
@@ -377,7 +377,7 @@ class BriefingEngine:
                     same4 = sum(r["games"] for r in rows if r["side4"] == start) / n
                     eid = self.e(f"고티어 정글러가 {LANE_SIDE_KO[start]} 사이드에서 시작하면 3:00에 반대 사이드 {pct(opp3)}, "
                                  f"4:00에 시작 사이드 {pct(same4)} (n={n})", n)
-                    card.add(f"게임 중 상대 정글 시작 위치가 보이면: {LANE_SIDE_KO[start]} 사이드 시작 → 3:00 반대편 {pct(opp3)}, "
+                    card.add(f"게임 중 상대 정글 시작 위치가 보이면: {LANE_SIDE_KO[start]} 사이드에서 시작하면 3:00엔 {pct(opp3)} 확률로 반대편, "
                              f"4:00 다시 {LANE_SIDE_KO[start]} 사이드 {pct(same4)}", eid)
         if not card.headline:
             card.headline = "데이터 부족"
@@ -391,7 +391,7 @@ class BriefingEngine:
             parts = ", ".join(f"{LANE_KO[r['lane']]} {pct(r['games'] / tot)}" for r in fg)
             med = sorted(fg, key=lambda r: -r["games"])[0]
             eid = self.e(f"{self.name(champ)} 8분 이전 라인에서 처음 킬이 난 위치: {parts}; 가장 많은 {LANE_KO[med['lane']]} "
-                         f"보통 시각(중앙값) {mmss(med['median_s'])} (n={tot}, 킬 없이 끝난 갱 시도는 기록에 없음. "
+                         f"보통 시각(중앙값) {mmss(med['median_s'])} (n={tot}, 킬 없이 끝난 갱 시도는 기록에 남지 않아요. "
                          f"어느 라인이 좋은지가 아니라 고티어가 실제로 어디서 첫 킬을 냈는지의 분포)", tot)
             card.add(f"첫 킬이 난 라인 분포(참고): {parts}, 가장 흔한 {josa(LANE_KO[med['lane']])} 보통 "
                      f"{mmss(med['median_s'])}쯤", eid)
@@ -434,7 +434,7 @@ class BriefingEngine:
                                            f"(n={x['games']})", x["games"], sc))
                         parts.append(f"적 {josa(self.name(enemy))} 갱에 죽는 판 {pct(x['died_to_jg'])} (평균 {pct(b['died_to_jg'])})")
                         if v - b["died_to_jg"] >= 0.04:
-                            why.append(f"적 {josa(self.name(enemy), '이가')} 정글 갱에 잘 죽음")
+                            why.append(f"상대 {josa(self.name(enemy), '이가')} 정글 갱에 잘 죽어요")
                 if ally:
                     x, b, sc = exposure(pos, ally)
                     if x and b and x["games"] >= 5:
@@ -447,7 +447,7 @@ class BriefingEngine:
                         parts.append(f"아군 {josa(self.name(ally))} 정글과 킬 내는 판 {pct(x['kill_with_jg'])} "
                                      f"(평균 {pct(b['kill_with_jg'])})")
                         if v - b["kill_with_jg"] >= 0.04:
-                            why.append(f"아군 {josa(self.name(ally), '이가')} 갱 호응이 좋음")
+                            why.append(f"우리 {josa(self.name(ally), '이가')} 갱에 잘 따라와요")
                 if ally and enemy:
                     lm = self.stats.lane_matchup(s, pos, ally, enemy)
                     if lm and lm["games"] >= 3:
@@ -468,7 +468,7 @@ class BriefingEngine:
                          *best[2], kind="inference")
                 self.facts["gank_lane"] = {"lane": best[1], "why": best[4], "eids": best[2]}
             else:
-                card.headline = "라인별 갱 성공률 차이 작음 → 라인 주도권 있는 쪽으로"
+                card.headline = "라인별 갱 성공률 차이가 작아요. 라인 주도권이 있는 쪽으로 가요"
         if not card.headline:
             card.headline = (f"첫 갱 주로 {LANE_KO[fg[0]['lane']]}" if tot else "상대 라이너가 정해지면 갱 갈 곳을 알려드려요")
         return card
@@ -497,12 +497,12 @@ class BriefingEngine:
                       and d[b]["won"] / d[b]["fights"] > 0.55]
             self.facts["duel"] = {"weak": weak, "strong": strong, "eid": general[1]}
         if not enemy_jg:
-            card.headline = "상대 정글 아직 모름"
+            card.headline = "상대 정글을 아직 몰라요"
             card.add("상대 정글이 정해지면 1:1 상성과 시간대별 골드 차이를 보여줘요.")
             return card
         m = self.stats.matchup(s, champ, enemy_jg)
         if not m:
-            card.headline = f"vs {self.name(enemy_jg)}: 기록 없음"
+            card.headline = f"vs {self.name(enemy_jg)}: 아직 기록이 없어요"
             card.add(f"{self.scope.label}에서 {self.name(champ)} vs {self.name(enemy_jg)} 정글 기록이 아직 없어요.")
             return card
         adj = shrink(m["wins"], m["games"], k=15)
@@ -527,7 +527,7 @@ class BriefingEngine:
             if ahead:
                 desc.append(f"{ahead[0]}~{ahead[-1]}분 골드 앞섬")
             if behind:
-                desc.append(f"{behind[0]}~{behind[-1]}분 골드 밀림")
+                desc.append(f"{behind[0]}~{behind[-1]}분에 골드가 밀려요")
             e3 = self.e(f"{self.name(champ)} vs {self.name(enemy_jg)} 분당 평균 골드 차: "
                         + ", ".join(f"{r['minute']}분 {signed(r['gold_diff'])}" for r in curve[::2])
                         + f" (n={m['games']})", m["games"])
@@ -600,12 +600,12 @@ class BriefingEngine:
                 side_score[side] = tot
         if len(side_score) == 2 and min((ev.games or 0) for ev in self.ev.items if ev.id in refs) >= MIN_INFER:
             if side_score["bot"] - side_score["top"] > 200:
-                card.headline = "봇 라인전 유리 예상 → 드래곤 쪽 위주로 운영"
+                card.headline = "봇 라인전이 유리해 보여요. 드래곤 쪽 위주로 운영해요"
                 self.facts["obj_side"] = {"side": "dragon", "eids": refs}
                 card.add("10분 골드 기준 봇 듀오가 탑보다 유리해요. 봇 주도권을 살려서 드래곤 나오기 전에 귀환해서 정비하세요.",
                          *refs, kind="inference")
             elif side_score["top"] - side_score["bot"] > 200:
-                card.headline = "탑 라인전 유리 예상 → 유충·전령 쪽 위주로 운영"
+                card.headline = "탑 라인전이 유리해 보여요. 유충·전령 쪽 위주로 운영해요"
                 self.facts["obj_side"] = {"side": "grub", "eids": refs}
                 card.add("10분 골드 기준 탑이 봇보다 유리해요. 탑 주도권을 살려서 유충 나오는 시간에 맞춰 움직이세요.",
                          *refs, kind="inference")
@@ -646,17 +646,17 @@ class BriefingEngine:
                              min(sa[1], se[1]))
                 card.add(f"후반 힘(35분+ 승률 − 25분 전 승률): 아군 {sa[0] * 100:+.1f}%p / 적 {se[0] * 100:+.1f}%p", eid)
                 if sa[0] - se[0] > 0.04:
-                    card.headline = "우리가 후반 조합 → 초반 손해 줄이고 오브젝트 맞교환하며 버티기"
+                    card.headline = "우리가 후반 조합이에요. 초반 손해를 줄이고 오브젝트를 맞교환하며 버텨요"
                     self.facts["scaling"] = {"who": "ally", "eid": eid}
                     card.add("우리 팀이 후반 조합이에요. 초반엔 무리하게 싸우지 말고 시야 잡고 오브젝트 맞교환하며 버티세요.",
                              eid, kind="inference")
                 elif se[0] - sa[0] > 0.04:
-                    card.headline = "적 팀이 후반형 → 25분 전 굴려서 마무리"
+                    card.headline = "상대가 후반 조합이에요. 25분 전에 굴려서 끝내요"
                     self.facts["scaling"] = {"who": "enemy", "eid": eid}
                     card.add("상대가 후반 조합이에요. 초반 갱과 오브젝트로 차이를 벌리고 25분 전후에 끝내세요.",
                              eid, kind="inference")
                 else:
-                    card.headline = "양 팀 후반 힘 차이 작음 (4%p 미만)"
+                    card.headline = "양 팀 후반 힘 차이는 크지 않아요 (4%p 미만)"
         d = self.stats.duration(s, champ)
         if d:
             parts = [f"{k} {pct(v['wins'] / v['games'])}(n={v['games']})" for k, v in sorted(d.items(), key=lambda kv: DUR_ORDER.index(kv[0]))]
@@ -715,71 +715,71 @@ class BriefingEngine:
         if st and st["n"] >= MIN_INFER:
             sh = st["share"]
             if st["clear"] == "full_clear" and sh["full_clear"] >= 0.5:
-                how = f"3분 안에 풀캠 (고티어 {me} {pct(sh['full_clear'])})"
+                how = f"3분 안에 풀캠을 해요 (고티어 {me} {pct(sh['full_clear'])})"
             elif sh["three_or_less"] >= 0.35:
-                how = f"3캠만 먹고 바로 갱·카정 (고티어 {me} {pct(sh['three_or_less'])})"
+                how = f"3캠만 먹고 바로 갱이나 카정을 가요 (고티어 {me} {pct(sh['three_or_less'])})"
             else:
-                how = (f"풀캠({pct(sh['full_clear'])})이 기본, 라인 상황이 좋으면 4~5캠프 먹고 갱"
+                how = (f"풀캠({pct(sh['full_clear'])})이 기본이고, 라인 상황이 좋으면 4~5캠프만 먹고 갱을 가요"
                        f"({pct(sh['partial'])})")
-            camp = f"{st['camp']} 시작 → " if st["camp"] and st["camp_share"] >= 0.4 else ""
+            camp = f"{st['camp']}에서 시작해서 " if st["camp"] and st["camp_share"] >= 0.4 else ""
             plan.append(PlanLine("시작", camp + how, [e for e in (st["camp_eid"], st["eid"]) if e]))
 
         gl, gt = f.get("gank_lane"), f.get("gank_time")
         when = f"{mmss(gt['median_s'])} 전후" if gt else "4분 전후"
         if gl:
             why = f" — {', '.join(gl['why'][:2])}" if gl["why"] else ""
-            plan.append(PlanLine("첫 갱", f"{when} {LANE_KO[gl['lane']]} 먼저 갱{why}",
+            plan.append(PlanLine("첫 갱", f"{when}에 {LANE_KO[gl['lane']]}부터 갱을 가 보세요{why}",
                                  gl["eids"] + ([gt["eid"]] if gt else [])))
         elif gt:
-            plan.append(PlanLine("첫 갱", f"{when}, 라인별 차이가 작으니 라인 주도권 있는 쪽으로 첫 갱",
+            plan.append(PlanLine("첫 갱", f"{when}에 라인 주도권이 있는 쪽으로 첫 갱을 가 보세요. 라인별 차이는 크지 않아요",
                                  [gt["eid"]]))
 
         warn, warn_ev = [], []
         es = f.get("enemy_side3")
         if es:
             other = "봇" if es["side"] == "탑" else "탑"
-            warn.append(f"3:00엔 상대 {josa(self.name(enemy_jg), '이가')} {es['side']} 쪽에 있을 확률 {pct(es['share'])} → "
-                        f"그 시간엔 {other} 쪽 바위게·갱이 안전")
+            warn.append(f"3:00엔 상대 {josa(self.name(enemy_jg), '이가')} {pct(es['share'])} 확률로 {es['side']} 쪽에 있어요. "
+                        f"그 시간엔 {other} 쪽 바위게와 갱이 안전해요")
             warn_ev.append(es["eid"])
         mu = f.get("matchup")
         if mu and mu["gd5"] < -150:
-            warn.append(f"{self.name(enemy_jg)} 상대로 5분 골드가 평균 {abs(mu['gd5']):.0f} 밀림 → 초반 정글 1:1 피하기")
+            warn.append(f"{self.name(enemy_jg)} 상대로는 5분 골드가 평균 {abs(mu['gd5']):.0f} 밀려요. 초반 정글 1:1은 피해 보세요")
             warn_ev.append(mu["eid"])
         du = f.get("duel")
         if du and du["weak"]:
-            warn.append(f"{josa(me)} {'·'.join(BAND_KO[x] for x in du['weak'])} 정글 싸움 승률이 낮음 → 그 레벨대엔 싸우지 말고 파밍")
+            warn.append(f"{josa(me)} {'·'.join(BAND_KO[x] for x in du['weak'])} 정글 싸움 승률이 낮아요. 그 레벨대엔 싸우지 말고 파밍해 보세요")
             warn_ev.append(du["eid"])
         elif du and du["strong"]:
-            warn.append(f"{josa(me)} {'·'.join(BAND_KO[x] for x in du['strong'])} 정글 싸움 승률이 높음 → 그 레벨대엔 싸움·카정 노려볼 만함")
+            warn.append(f"{josa(me)} {'·'.join(BAND_KO[x] for x in du['strong'])} 정글 싸움 승률이 높아요. 그 레벨대엔 싸움이나 카정을 노려 보세요")
             warn_ev.append(du["eid"])
         if warn:
-            plan.append(PlanLine("주의", " / ".join(warn), warn_ev))
+            plan.append(PlanLine("주의", " ".join(warn), warn_ev))
 
         ot, os_ = f.get("obj_times"), f.get("obj_side")
         has_turn = any(t["useful"] and t["median"] for t in f.get("turns", {}).values())
-        reset = "" if has_turn else ", 7:30쯤 귀환해서 정비하고 먼저 자리 잡기"
+        reset = "" if has_turn else " 7:30쯤 귀환해서 정비하고 먼저 자리를 잡아요."
         if ot:
             if os_:
                 target = "첫 드래곤" if os_["side"] == "dragon" else "공허 유충"
                 lane = "봇" if os_["side"] == "dragon" else "탑"
                 t = ot["dragon"] if os_["side"] == "dragon" else ot["grub"]
-                plan.append(PlanLine("오브젝트", f"{lane} 라인전이 유리 → {target} 먼저 (고티어 보통 {mmss(t)}), "
-                                     f"{reset.lstrip(', ') or '라인 주도권 유지'}", os_["eids"] + [ot["eid"]]))
+                plan.append(PlanLine("오브젝트", f"{lane} 라인전이 유리해서 {target}부터 노려요 (고티어 보통 {mmss(t)})."
+                                     f"{reset or ' 라인 주도권을 지켜 주세요.'}", os_["eids"] + [ot["eid"]]))
             else:
-                plan.append(PlanLine("오브젝트", f"고티어 기준 유충 {mmss(ot['grub'])}, 드래곤 {mmss(ot['dragon'])}쯤 첫 싸움 "
-                                     f"→ 주도권 있는 쪽 오브젝트로{reset}", [ot["eid"]]))
+                plan.append(PlanLine("오브젝트", f"첫 싸움은 보통 유충 {mmss(ot['grub'])}, 드래곤 {mmss(ot['dragon'])}쯤 나요. "
+                                     f"주도권이 있는 쪽 오브젝트로 가요.{reset}", [ot["eid"]]))
         turns = f.get("turns", {})
         for obj in ("DRAGON", "HORDE"):
             tf = turns.get(obj)
             if tf and tf["useful"] and tf["median"]:
                 lo, hi = tf["median"] - 150, tf["median"] - 40
-                plan.append(PlanLine("귀환", f"{OBJ_TURN_KO[obj]}(고티어 {mmss(tf['median'])}) 직전 30초엔 본진에 있지 않기 "
-                                     f"→ 그때 귀환한 팀은 {pct(tf['rate']['late'])}만 가져감. 귀환할 거면 {mmss(lo)}~{mmss(hi)}에", [tf["eid"]]))
+                plan.append(PlanLine("귀환", f"{OBJ_TURN_KO[obj]}(보통 {mmss(tf['median'])}) 직전 30초엔 본진에 있으면 안 돼요. "
+                                     f"그때 귀환한 팀은 {pct(tf['rate']['late'])}만 가져갔어요. 귀환은 {mmss(lo)}~{mmss(hi)}에 끝내 두세요", [tf["eid"]]))
                 break
         sc = f.get("scaling")
         if sc:
-            text = ("상대가 후반 조합 → 오브젝트로 차이 벌려서 25분 전후에 끝내기" if sc["who"] == "enemy"
-                    else "우리가 후반 조합 → 초반 손해만 피하고 오브젝트 맞교환으로 시간 벌기")
+            text = ("상대가 후반 조합이라, 오브젝트로 차이를 벌려서 25분 전후에 끝내 보세요" if sc["who"] == "enemy"
+                    else "우리가 후반 조합이라, 초반 손해만 피하고 오브젝트를 맞교환하며 시간을 벌어요")
             plan.append(PlanLine("운영", text, [sc["eid"]]))
         for line in plan:
             line.concepts = PLAN_CONCEPTS.get(line.title, [])
@@ -803,7 +803,7 @@ class BriefingEngine:
             card.headline = f"프로 대회 {pro['games']}경기 · 승률 {pct(pro['wins'] / pro['games'])}"
         elif info:
             card.add(f"최근 프로 대회({period})에서 {self.name(champ)} 정글 기록이 없어요.",
-                     self.ev.add(f"프로 대회 정글 기록 {info['games']}경기 중 {self.name(champ)} 없음", SRC_PRO))
+                     self.ev.add(f"프로 대회 정글 기록 {info['games']}경기에 {self.name(champ)}는 없어요", SRC_PRO))
         if enemy_jg:
             pm = self.stats.pro_matchup(champ, enemy_jg)
             if pm:
@@ -817,7 +817,7 @@ class BriefingEngine:
             card.add(f"[{topic}] {g['text']}", eid, kind="guide")
         if not card.headline:
             n = sum(1 for i in card.items if i.kind == "guide")
-            card.headline = f"전문가 가이드 {n}개" if n else "프로·가이드 데이터 없음 (loldosa pro sync / guides add)"
+            card.headline = f"전문가 가이드 {n}개" if n else "프로 대회·가이드 기록이 아직 없어요"
         return card
 
     def guides(self, champ: int, enemy_jg: int, limit: int = 6) -> list[dict]:

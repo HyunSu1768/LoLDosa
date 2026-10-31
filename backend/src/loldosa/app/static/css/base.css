@@ -1,0 +1,161 @@
+/* LoLDosa 컴포넌트 — 근거는 docs/DESIGN.md 의 해당 절 번호로 표시 */
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css");
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg); color: var(--grey700); font-family: var(--font);
+  font-size: var(--t6); line-height: var(--t6-lh); letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased; word-break: keep-all;           /* 한글 단어 중간 줄바꿈 방지 */
+}
+/* §2.4 숫자는 고정폭: 점수·시간이 바뀌어도 글자가 흔들리지 않게 (Toss Product Sans 의 고정폭 숫자 대체) */
+.num, .hero-num, td, .val { font-variant-numeric: tabular-nums; }
+a { color: var(--blue-text); text-decoration: none; }
+button { font: inherit; color: inherit; }
+.hidden { display: none !important; }
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 6px; }  /* §5 키보드 접근성 */
+
+/* ---------- 앱 틀: 왼쪽 내비 + 가운데 한 줄 (§1.1 한 화면 한 과업) ---------- */
+.app { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+.nav { position: sticky; top: 0; height: 100vh; padding: var(--s6) var(--s3); display: flex; flex-direction: column; gap: 2px;
+  background: var(--bg-sunken); }
+.brand { font-size: var(--t4); font-weight: 800; color: var(--grey900); padding: 0 var(--s3) var(--s6); letter-spacing: -0.02em; }
+.brand b { color: var(--blue); }
+.nav-item { display: flex; align-items: center; gap: var(--s3); height: 44px; padding: 0 var(--s3); border: 0; background: none;
+  border-radius: var(--r-m); color: var(--grey600); font-size: var(--t6); font-weight: 600; cursor: pointer; text-align: left;
+  transition: background-color var(--dur) ease, color var(--dur) ease; }
+.nav-item svg { width: 20px; height: 20px; flex: none; }
+.nav-item.on { background: var(--bg-layer); color: var(--grey900); }
+.nav-item .dot { width: 6px; height: 6px; border-radius: 3px; background: var(--red); margin-left: auto; }
+.nav-foot { margin-top: auto; padding: var(--s3); font-size: var(--t7); color: var(--grey500); display: grid; gap: 6px; }
+.conn { display: flex; align-items: center; gap: 6px; }
+.conn i { width: 8px; height: 8px; border-radius: 4px; background: var(--grey400); }
+.conn.on i { background: var(--green); }
+
+.main { min-width: 0; }
+.page { max-width: 760px; margin: 0 auto; padding: var(--s10) var(--s6) 120px; }
+.page.wide { max-width: 1120px; }
+
+/* ---------- 타이포 위계 (§2.3) ---------- */
+.top { margin-bottom: var(--s8); }
+.top h1 { margin: 0; font-size: var(--t2); line-height: var(--t2-lh); color: var(--grey900); font-weight: 700; letter-spacing: -0.02em; }
+.top p { margin: var(--s2) 0 0; color: var(--grey600); font-size: var(--t5); line-height: var(--t5-lh); }
+.eyebrow { font-size: var(--t7); color: var(--grey500); font-weight: 600; margin-bottom: 6px; }
+h2.section { font-size: var(--t4); line-height: var(--t4-lh); color: var(--grey900); margin: var(--s10) 0 var(--s3); font-weight: 700; }
+h2.section small { font-size: var(--t7); color: var(--grey500); font-weight: 500; margin-left: 6px; }
+.title { color: var(--grey900); font-weight: 600; }
+.sub { color: var(--grey600); font-size: var(--t7); line-height: var(--t7-lh); }
+.body { color: var(--grey700); font-size: var(--t5); line-height: 1.6; }
+.good, .row .end .val.good { color: var(--green-text); } .bad, .row .end .val.bad { color: var(--red-text); } .warn { color: var(--yellow); } .accent { color: var(--blue-text); }
+
+/* ---------- 큰 숫자 히어로 (§1.2 3초 안에 답) ---------- */
+.hero { padding: var(--s6) 0 var(--s2); }
+.hero-num { font-size: 56px; line-height: 64px; font-weight: 800; color: var(--grey900); letter-spacing: -0.03em; }
+.hero-num small { font-size: var(--t3); font-weight: 700; margin-left: 4px; color: var(--grey700); }
+.hero-cap { color: var(--grey600); font-size: var(--t5); margin-top: var(--s2); }
+.delta { font-weight: 700; } .delta.up { color: var(--green-text); } .delta.down { color: var(--red-text); }
+
+/* ---------- 카드·리스트 (§2.5) ---------- */
+.card { background: var(--bg-layer); border-radius: var(--r-card); padding: var(--s5) var(--s6); }
+.card + .card { margin-top: var(--s3); }
+/* H4: 앱의 '제안'은 내 기록(#202027)보다 한 층 위(#2C2C35)에 띄운다. H5: 그라데이션·원색 배경 없이 글과 버튼으로 위계 */
+.card.suggest { background: var(--bg-float); box-shadow: 0 12px 40px rgba(0, 0, 0, .35); }
+.list { background: var(--bg-layer); border-radius: var(--r-card); padding: var(--s2) 0; overflow: hidden; }
+.row { display: flex; align-items: center; gap: var(--s4); min-height: 64px; padding: var(--s3) var(--s6); width: 100%;
+  background: none; border: 0; text-align: left; transition: background-color var(--dur) ease; }
+button.row, a.row, .row.click { cursor: pointer; }
+.row + .row { border-top: 1px solid rgba(255, 255, 255, .04); }
+.row .lead { width: 40px; height: 40px; border-radius: 12px; flex: none; display: grid; place-items: center; background: var(--bg-float); overflow: hidden;
+  font-size: var(--t6); font-weight: 700; color: var(--grey700); }
+.row .lead img { width: 100%; height: 100%; object-fit: cover; }
+.row .mid { flex: 1; min-width: 0; }
+.row .mid .title { font-size: var(--t5); line-height: var(--t5-lh); }
+.row .end { text-align: right; flex: none; }
+.row .end .val { font-size: var(--t5); font-weight: 700; color: var(--grey900); }
+.row .chev { color: var(--grey400); flex: none; width: 16px; height: 16px; }
+@media (hover: hover) and (pointer: fine) {                      /* §2.7 마우스에서만 호버 */
+  button.row:hover, a.row:hover, .row.click:hover, .nav-item:hover { background: rgba(222, 222, 255, .06); }
+  .nav-item.on:hover { background: var(--bg-layer); }
+}
+
+/* ---------- 버튼 (§2.6 TDS 크기·두 단계 위계) ---------- */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; cursor: pointer; font-weight: 600;
+  height: 48px; padding: 0 var(--s5); border-radius: var(--r-l); font-size: var(--t5);
+  transition: transform .15s var(--ease-back), background-color var(--dur) ease, opacity var(--dur) ease; }
+.btn:active { transform: scale(.96); }
+.btn:disabled { opacity: .4; cursor: default; transform: none; }
+.btn.xl { height: 56px; border-radius: var(--r-xl); width: 100%; }
+.btn.m { height: 38px; border-radius: var(--r-m); font-size: var(--t6); padding: 0 var(--s4); }
+.btn.s { height: 32px; border-radius: var(--r-s); font-size: var(--t7); padding: 0 var(--s3); }
+.btn.fill { background: var(--blue); color: #fff; }
+.btn.weak { background: var(--blue-weak); color: var(--blue-text); }
+.btn.grey { background: var(--bg-float); color: var(--grey800); }
+.btn.danger { background: var(--red-weak); color: var(--red-text); }
+.btn-row { display: flex; gap: var(--s2); flex-wrap: wrap; margin-top: var(--s4); }
+.btn-row.end { justify-content: flex-end; }
+.btn.block { width: 100%; }
+
+/* ---------- 뱃지·칩 ---------- */
+.badge { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 6px; font-size: 12px; font-weight: 600;
+  background: var(--bg-float); color: var(--grey700); vertical-align: middle; }
+.badge.blue { background: var(--blue-weak); color: var(--blue-text); }
+.badge.green { background: var(--green-weak); color: var(--green-text); }
+.badge.red { background: var(--red-weak); color: var(--red-text); }
+.badge.yellow { background: var(--yellow-weak); color: var(--yellow); }
+
+/* ---------- 진행 막대 ---------- */
+.bar { height: 8px; background: var(--bg-float); border-radius: 4px; overflow: hidden; }
+.bar > i { display: block; height: 100%; border-radius: 4px; background: var(--blue); transition: width .6s var(--ease); }
+.bar.green > i { background: var(--green); } .bar.red > i { background: var(--red); }
+.scale { display: flex; justify-content: space-between; font-size: 12px; color: var(--grey500); margin-top: 6px; }
+
+/* ---------- 세그먼트 ---------- */
+.seg { display: inline-flex; background: var(--bg-sunken); border-radius: var(--r-m); padding: 3px; gap: 2px; }
+.seg button { border: 0; background: none; height: 32px; padding: 0 14px; border-radius: 8px; color: var(--grey600); font-weight: 600; cursor: pointer; font-size: var(--t7); }
+.seg button.on { background: var(--bg-float); color: var(--grey900); }
+
+/* ---------- 시트(모달) · 토스트 (§1.6 결정은 별도 층) ---------- */
+.dim { position: fixed; inset: 0; background: var(--dim); display: grid; place-items: center; z-index: 50; animation: fade .2s ease; padding: var(--s6); }
+.sheet { width: min(560px, 100%); max-height: 86vh; overflow: auto; background: var(--bg-float); border-radius: 24px; padding: var(--s8) var(--s6) var(--s6);
+  animation: rise .35s var(--ease); position: relative; }
+.sheet.wide { width: min(880px, 100%); }
+.sheet h2 { margin: 0 0 var(--s2); font-size: var(--t3); line-height: var(--t3-lh); color: var(--grey900); }
+.sheet .close { position: absolute; top: 18px; right: 18px; width: 32px; height: 32px; border-radius: 16px; border: 0; background: var(--grey100);
+  color: var(--grey600); cursor: pointer; font-size: 16px; }
+@keyframes fade { from { opacity: 0; } }
+@keyframes rise { from { transform: translateY(24px); opacity: 0; } }
+.toast { position: fixed; left: 50%; bottom: 32px; transform: translateX(-50%); background: var(--bg-float); color: var(--grey900); padding: 14px 20px;
+  border-radius: 16px; font-weight: 600; box-shadow: 0 8px 32px rgba(0, 0, 0, .4); z-index: 60; animation: rise .3s var(--ease); max-width: 90vw; }
+
+/* ---------- 로딩: 스켈레톤 (§1.5 기다림을 모양으로) ---------- */
+.sk { background: linear-gradient(90deg, var(--grey50) 0%, var(--grey100) 50%, var(--grey50) 100%); background-size: 200% 100%;
+  animation: sk 1.2s ease-in-out infinite; border-radius: 10px; }
+@keyframes sk { to { background-position: -200% 0; } }
+.sk.line { height: 16px; margin: 8px 0; } .sk.big { height: 56px; width: 160px; } .sk.card { height: 120px; border-radius: var(--r-card); margin-top: 12px; }
+
+/* ---------- 빈 상태 (§1.5) ---------- */
+.empty { text-align: center; padding: var(--s10) var(--s6); }
+.empty .em { font-size: 40px; }
+.empty h3 { color: var(--grey900); font-size: var(--t4); margin: var(--s3) 0 var(--s2); }
+.empty p { color: var(--grey600); margin: 0 auto var(--s5); max-width: 420px; }
+
+/* ---------- 입력 ---------- */
+.field { margin-bottom: var(--s5); }
+.field label { display: block; font-size: var(--t7); color: var(--grey600); margin-bottom: 8px; font-weight: 600; }
+.input { width: 100%; height: 52px; padding: 0 16px; border-radius: var(--r-l); background: var(--bg-sunken); border: 1px solid transparent;
+  color: var(--grey900); font: inherit; font-size: var(--t5); }
+.input:focus { outline: none; border-color: var(--blue); }
+.input-row { display: flex; gap: 8px; }
+.toggle { appearance: none; width: 48px; height: 28px; border-radius: 14px; background: var(--grey300); position: relative; cursor: pointer; transition: background .2s; flex: none; }
+.toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 11px; background: #fff; transition: transform .25s var(--ease-back); }
+.toggle:checked { background: var(--blue); } .toggle:checked::after { transform: translateX(20px); }
+
+/* ---------- 용어 툴팁 ---------- */
+.term { border-bottom: 1px dashed var(--grey500); cursor: help; }
+.tip { position: absolute; z-index: 70; width: 300px; background: var(--bg-float); border-radius: 14px; padding: 14px 16px; font-size: var(--t7); line-height: 1.55;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, .45); color: var(--grey700); }
+.tip b { color: var(--grey900); font-size: var(--t6); }
+
+/* ---------- 근거(n=…) : 기본 숨김, 설정에서 켜기 (§1.4 점진적 공개) ---------- */
+.ev { display: none; margin-left: 6px; font-size: 11px; color: var(--grey500); background: var(--bg-sunken); border-radius: 5px; padding: 1px 6px; cursor: help; }
+body.show-ev .ev { display: inline-block; }
