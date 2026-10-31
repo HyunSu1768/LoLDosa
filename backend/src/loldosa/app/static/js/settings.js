@@ -1,13 +1,13 @@
 /* 설정: 꼭 필요한 것만, 바꾸면 바로 저장 (저장 버튼 없음).
  * S1 없으면 목표를 못 이루는 것만 · S2 에러는 상황→원인→고치는 버튼 · S3 보조 버튼은 「닫기」 · S5 키보드로 모두 조작 */
 import { $, $$, api, champImg, ensureChamps, esc, openSheet, put, row, skeleton, state, toast } from "./core.js";
-import { claudeSetupSheet } from "./flows.js";
+import { claudeSetupSheet, updateSheet } from "./flows.js";
 
 export async function renderSettings(view) {
   view.innerHTML = `<div class="page">${skeleton(2)}</div>`;
   await ensureChamps();
-  const [s, key, st, cl] = await Promise.all([api("/api/settings"), api("/api/riot-key").catch(() => ({})), api("/api/status").catch(() => ({})),
-    api("/api/claude").catch(() => ({}))]);
+  const [s, key, st, cl, up] = await Promise.all([api("/api/settings"), api("/api/riot-key").catch(() => ({})), api("/api/status").catch(() => ({})),
+    api("/api/claude").catch(() => ({})), api("/api/update").catch(() => ({}))]);
   const keyOk = key.set && !key.problem;
   view.innerHTML = `<div class="page">
     <div class="top"><h1>설정</h1></div>
@@ -37,6 +37,13 @@ export async function renderSettings(view) {
         <input type="checkbox" class="toggle" id="ev" ${document.body.classList.contains("show-ev") ? "checked" : ""}></label>
     </div>
 
+    <h2 class="section">버전</h2>
+    <div class="list">
+      ${row({ lead: up.available ? "⬆️" : "✅", title: up.available ? `${esc(up.latest)}로 업데이트할 수 있어요` : `최신 버전이에요 · ${esc(up.current || "")}`,
+        sub: up.available ? (up.can_apply ? "눌러서 바로 업데이트해요" : "소스로 실행 중이라 git pull 로 업데이트해 주세요") : (up.error ? esc(up.error) : "새 버전이 나오면 켤 때 알려 드려요"),
+        ...(up.available && up.can_apply ? { attrs: 'data-act="update"' } : {}) })}
+    </div>
+
     <h2 class="section">문제가 생겼을 때</h2>
     <div class="list">
       ${row({ lead: "🧾", title: "진단 기록 내려받기", sub: "롤 클라이언트 응답과 게임 단계 기록이 들어 있어요. 비밀번호·API 키는 없어요", href: "/api/diagnostics" })}
@@ -57,6 +64,7 @@ export async function renderSettings(view) {
     if (a === "key") keySheet(() => renderSettings(view));
     if (a === "pool") poolSheet(s.champion_pool || [], () => renderSettings(view));
     if (a === "claude") claudeSetupSheet({ after: () => renderSettings(view) });
+    if (a === "update") updateSheet(up);
   });
 }
 const seg = (opts, cur) => opts.map(([v, l]) => `<button type="button" data-v="${v}" class="${v === cur ? "on" : ""}">${l}</button>`).join("");

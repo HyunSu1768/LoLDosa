@@ -347,6 +347,38 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
         await hub.send(msg)
         return msg
 
+    @app.get("/api/update")
+    async def update_check():
+        """GitHub Releases 최신 버전과 비교."""
+        from ..updater import check
+
+        return await asyncio.to_thread(check)
+
+    @app.post("/api/update/apply")
+    async def update_apply():
+        """내려받고 → 압축 풀고 → 앱을 끈 뒤 파일을 바꾸고 다시 켠다."""
+        from ..updater import apply, check, frozen
+
+        if not frozen():
+            raise HTTPException(400, "소스로 실행 중이에요. 저장소에서 git pull 로 업데이트해 주세요.")
+        info = await asyncio.to_thread(check)
+        if not info.get("available"):
+            raise HTTPException(400, "이미 최신 버전이에요.")
+
+        def bye():
+            import threading
+
+            threading.Timer(1.5, lambda: os._exit(0)).start()  # 진행 상황 응답이 나간 뒤 종료
+
+        apply(info, bye)
+        return {"ok": True, "latest": info["latest"]}
+
+    @app.get("/api/update/progress")
+    async def update_progress():
+        from ..updater import progress
+
+        return progress
+
     @app.get("/api/claude")
     async def claude_status():
         """AI 코치 준비 상태: 설치됐는지, 로그인됐는지 (토큰은 다루지 않고 `claude auth status` 결과만)."""

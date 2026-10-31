@@ -130,3 +130,40 @@ export async function checkClaudeOnStart() {
   localStorage.setItem("claudeAskedAt", String(Date.now()));
   claudeSetupSheet({ reason: "AI 코치가 켜져 있는데 Claude가 준비되지 않았어요. 설정에서 AI 코치를 끄면 다시 묻지 않아요." });
 }
+
+/* ---------- 업데이트: 버튼 하나 (내려받기 → 앱 다시 시작) ---------- */
+export async function updateSheet(info) {
+  const sh = openSheet(`<div class="eyebrow">새 버전</div><h2>${esc(info.latest)}로 업데이트할게요</h2>
+    <p class="body">지금 ${esc(info.current)}을 쓰고 있어요. 내 복기 기록과 설정은 그대로 남아요.</p>
+    ${info.notes ? `<details class="fold" style="margin-top:12px"><summary>바뀐 점</summary><p class="sub" style="white-space:pre-wrap">${esc(info.notes)}</p></details>` : ""}
+    <div class="bar" style="margin-top:20px"><i id="up-bar" style="width:0%"></i></div>
+    <p class="sub" id="up-msg">${info.size ? `${Math.round(info.size / 1e6)}MB를 내려받아요. 1~2분 걸려요.` : ""}</p>
+    <div class="btn-row end"><button class="btn grey m" data-close>다음에</button><button class="btn fill m" id="up-go">업데이트하기</button></div>`);
+  $("#up-go", sh).onclick = async () => {
+    $("#up-go", sh).disabled = true;
+    try { await _post("/api/update/apply"); } catch (e) { $("#up-msg", sh).innerHTML = `<span class="bad">${esc(e.message)}</span>`; $("#up-go", sh).disabled = false; return; }
+    for (;;) {  // 진행 상황: 내려받기 → 압축 풀기 → 다시 시작 (앱이 꺼지면 응답이 끊김 = 다시 시작 중)
+      await new Promise((ok) => setTimeout(ok, 700));
+      let p;
+      try { p = await _api("/api/update/progress"); } catch { $("#up-msg", sh).textContent = "다시 시작하는 중이에요. 잠시 뒤 새 버전이 열려요."; return; }
+      $("#up-bar", sh).style.width = `${p.pct || 0}%`;
+      $("#up-msg", sh).textContent = p.message || "";
+      if (p.state === "error") { $("#up-msg", sh).innerHTML = `<span class="bad">${esc(p.message)}</span> 다시 눌러 주세요.`; $("#up-go", sh).disabled = false; return; }
+    }
+  };
+}
+
+/** 켤 때 한 번: 새 버전이 있으면 왼쪽 아래에 작게 알린다 (화면을 막지 않게). */
+export async function checkUpdateOnStart() {
+  const info = await _api("/api/update").catch(() => null);
+  if (!info || !info.available || !info.can_apply) return;
+  const box = Object.assign(document.createElement("aside"), { id: "update-note" });
+  box.innerHTML = `<div class="pg"><button class="close" aria-label="닫기" data-x>✕</button>
+    <div class="eyebrow">새 버전 ${esc(info.latest)}</div><div class="title">업데이트가 있어요</div>
+    <div class="btn-row"><button class="btn fill m" data-go>업데이트하기</button></div></div>`;
+  box.onclick = (e) => {
+    if (e.target.closest("[data-x]")) box.remove();
+    if (e.target.closest("[data-go]")) { box.remove(); updateSheet(info); }
+  };
+  document.body.appendChild(box);
+}

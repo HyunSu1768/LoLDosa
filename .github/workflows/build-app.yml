@@ -36,6 +36,9 @@ jobs:
           uv pip install pyinstaller
       - name: Test
         run: uv run pytest -q
+      - name: Version
+        shell: bash
+        run: echo "${{ inputs.release_tag || github.ref_name }}" > src/loldosa/VERSION   # 앱이 업데이트를 비교할 때 쓰는 버전
       - name: Build
         shell: bash
         run: |
@@ -64,6 +67,32 @@ jobs:
           path: |
             backend/dist/LoLDosa
             backend/dist/LoLDosa.app
+      - name: Self-update test (Windows: 옛 버전으로 표시한 복사본이 최신 Release 로 바뀌고 다시 켜지는지)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-Process LoLDosa -ErrorAction SilentlyContinue | Stop-Process -Force   # 앞 단계 스모크 테스트 프로세스 정리
+          Start-Sleep 2
+          $t = Join-Path $env:RUNNER_TEMP "uptest"
+          Copy-Item -Recurse dist\LoLDosa $t
+          Set-Content -Path "$t\_internal\loldosa\VERSION" -Value "v0.0.1" -NoNewline
+          $before = (Get-Item "$t\LoLDosa.exe").LastWriteTimeUtc
+          $env:LOLDOSA_HOME = Join-Path $env:RUNNER_TEMP "uphome"
+          Start-Process -FilePath "$t\LoLDosa.exe" -ArgumentList "app","--browser","--no-ai","--port","8798"
+          for ($i=0; $i -lt 60; $i++) { try { Invoke-RestMethod http://127.0.0.1:8798/api/status | Out-Null; break } catch { Start-Sleep 2 } }
+          $u = Invoke-RestMethod http://127.0.0.1:8798/api/update
+          "update check: $($u | ConvertTo-Json -Compress)"
+          if (-not $u.available) { throw "업데이트가 있다고 나와야 해요" }
+          Invoke-RestMethod -Method Post http://127.0.0.1:8798/api/update/apply | Out-Null
+          $ok = $false
+          for ($i=0; $i -lt 120; $i++) {
+            Start-Sleep 2
+            $after = (Get-Item "$t\LoLDosa.exe").LastWriteTimeUtc
+            if ($after -ne $before -and (Get-Process LoLDosa -ErrorAction SilentlyContinue)) { $ok = $true; break }
+          }
+          Get-Process LoLDosa -ErrorAction SilentlyContinue | Stop-Process -Force
+          if (-not $ok) { throw "파일이 바뀌고 앱이 다시 켜져야 해요" }
+          "self-update OK"
       - name: Zip
         shell: bash
         run: |
