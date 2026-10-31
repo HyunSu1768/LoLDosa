@@ -27,9 +27,10 @@ def test_states_and_actions(tmp_path):
 
 def test_similar_and_summary(tmp_path):
     st = _store(tmp_path)
-    con = duckdb.connect()
-    con.execute(f"ATTACH '{st.path}' AS src (READ_ONLY)")
+    path = st.path
     st.close()
+    con = duckdb.connect()
+    con.execute(f"ATTACH '{path}' AS src (READ_ONLY)")
     from loldosa.analysis.decisions import STATE_COLUMNS
     rows = [dict(zip(STATE_COLUMNS, r)) for r in build_states(con, "src.")]
     assert rows
