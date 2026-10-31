@@ -53,12 +53,13 @@ def _recall(f):
 
 def _objective(f):
     turns = f.get("obj_turns") or {}
-    if not turns and "far_lost" not in f:
+    if not turns and "far_lost" not in f and "traded" not in f:
         return "na", "-"
     far = f.get("far_lost", 0)
     late = sum(1 for t in turns.values() if t["turn"] == "late")
     ok = far == 0 and late == 0
-    return ("pass" if ok else "fail"), f"합류 못 하고 내준 오브젝트 {far}회, 직전 귀환 {late}회"
+    traded = f.get("traded", 0)
+    return ("pass" if ok else "fail"), f"맞교환 없이 내준 오브젝트 {far}회, 맞교환 {traded}회, 직전 귀환 {late}회"
 
 
 def _tracking(f):

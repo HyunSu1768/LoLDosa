@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS bans (
 CREATE TABLE IF NOT EXISTS frames (
     match_id VARCHAR, minute INTEGER, participant_id INTEGER,
     x INTEGER, y INTEGER, level INTEGER, xp INTEGER, total_gold INTEGER,
-    jungle_cs INTEGER, lane_cs INTEGER, current_gold INTEGER,
+    jungle_cs INTEGER, lane_cs INTEGER, current_gold INTEGER, hp INTEGER, hp_max INTEGER,
     PRIMARY KEY (match_id, minute, participant_id)
 );
 CREATE TABLE IF NOT EXISTS events (
@@ -76,6 +76,8 @@ CREATE TABLE IF NOT EXISTS events (
     item_id INTEGER              -- ITEM_PURCHASED
 );
 ALTER TABLE frames ADD COLUMN IF NOT EXISTS current_gold INTEGER;
+ALTER TABLE frames ADD COLUMN IF NOT EXISTS hp INTEGER;
+ALTER TABLE frames ADD COLUMN IF NOT EXISTS hp_max INTEGER;
 ALTER TABLE events ADD COLUMN IF NOT EXISTS item_id INTEGER;
 """
 
@@ -88,7 +90,7 @@ COLUMNS = {
                      "magic_dmg", "physical_dmg", "true_dmg", "dmg_taken", "self_mitigated"],
     "bans": ["match_id", "team_id", "pick_turn", "champion_id"],
     "frames": ["match_id", "minute", "participant_id", "x", "y", "level", "xp", "total_gold",
-               "jungle_cs", "lane_cs", "current_gold"],
+               "jungle_cs", "lane_cs", "current_gold", "hp", "hp_max"],
     "events": ["match_id", "ts_ms", "type", "participant_id", "victim_id", "assists", "team_id",
                "monster_type", "monster_sub_type", "building_type", "lane", "ward_type", "x", "y", "item_id"],
 }
@@ -297,6 +299,7 @@ def normalize(match: dict, timeline: dict, bucket: str) -> dict[str, list]:
             out["frames"].append((
                 mid, minute, int(pid), pos.get("x"), pos.get("y"), pf.get("level"), pf.get("xp"),
                 pf.get("totalGold"), pf.get("jungleMinionsKilled"), pf.get("minionsKilled"), pf.get("currentGold"),
+                (pf.get("championStats") or {}).get("health"), (pf.get("championStats") or {}).get("healthMax"),
             ))
         for e in frame["events"]:
             if e["type"] not in KEEP_EVENTS:

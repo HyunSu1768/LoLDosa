@@ -565,7 +565,8 @@ def build_parser() -> argparse.ArgumentParser:
     riot.add_parser("check", help="API 키 동작 확인").set_defaults(func=cmd_riot_check)
 
     def collect_args(c):
-        c.add_argument("--bucket", nargs="+", default=["apex", "platinum"], choices=["apex", "platinum"])
+        c.add_argument("--bucket", nargs="+", default=["apex", "emerald", "platinum"],
+                       choices=["apex", "diamond", "emerald", "platinum"])
         c.add_argument("--players", type=int, default=50, help="경기 목록을 스캔할 플레이어 수")
         c.add_argument("--per-player", type=int, default=20)
         c.add_argument("--days", type=int, default=14)

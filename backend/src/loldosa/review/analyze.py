@@ -113,7 +113,8 @@ class Reviewer:
         ecols = ["ts_ms", "type", "participant_id", "victim_id", "assists", "team_id", "monster_type",
                  "monster_sub_type", "x", "y"]
         events = [dict(zip(ecols, r)) for r in x(
-            f"SELECT {', '.join(ecols)} FROM events WHERE match_id=? AND type IN ('CHAMPION_KILL', 'ELITE_MONSTER_KILL') "
+            f"SELECT {', '.join(ecols)} FROM events WHERE match_id=? AND type IN ('CHAMPION_KILL', 'ELITE_MONSTER_KILL', "
+            "'BUILDING_KILL', 'TURRET_PLATE_DESTROYED') "
             "ORDER BY ts_ms", [match_id])]
         return match, parts, frames, events
 
@@ -194,6 +195,26 @@ class Reviewer:
         if a:
             return a["x"], a["y"]
         return None
+
+    def trade(self, events: list[dict], t_ms: float, team: int, window_ms: int = 60_000) -> str | None:
+        """상대가 오브젝트를 먹은 앞뒤 1분 안에 우리가 다른 곳에서 얻은 것 (맞교환). 없으면 None."""
+        got = []
+        for e in events:
+            if abs(e["ts_ms"] - t_ms) > window_ms:
+                continue
+            if e["type"] == "ELITE_MONSTER_KILL" and e["team_id"] == team:
+                got.append(OBJ_KO.get(e["monster_type"], e["monster_type"]))
+            elif e["type"] == "BUILDING_KILL" and e["team_id"] not in (team, None):
+                got.append("포탑")
+        plates = sum(1 for e in events if e["type"] == "TURRET_PLATE_DESTROYED" and abs(e["ts_ms"] - t_ms) <= window_ms
+                     and e["team_id"] not in (team, None))
+        kills = sum(1 for e in events if e["type"] == "CHAMPION_KILL" and abs(e["ts_ms"] - t_ms) <= window_ms
+                    and self.by_pid.get(e["victim_id"], {}).get("team_id") not in (team, None))
+        if plates >= 2:
+            got.append(f"포탑 방패 {plates}개")
+        if kills >= 2:
+            got.append(f"킬 {kills}개")
+        return ", ".join(dict.fromkeys(got)) if got else None
 
     def involved(self, e: dict, pid: int) -> bool:
         return e["participant_id"] == pid or pid in (e["assists"] or [])
@@ -295,7 +316,7 @@ class Reviewer:
                 rv.lessons.append(Lesson(
                     "초반 정글링이 느렸음",
                     f"3:00에 {camps3}캠프였고, 그 전에 킬관여도 없었어요. 고티어 {josa(cname)} {pct(full)}가 3분 안에 풀캠을 해요. "
-                    f"첫 동선에서 캠프를 빠뜨리지 말고, 일찍 빠질 거면 확실한 갱 각이 있을 때만 빠지세요.", 3, ev))
+                    f"첫 동선에서 캠프를 빠뜨리지 말고, 일찍 빠질 거면 확실한 갱 각이 있을 때만 빠지세요.", 2, ev))
             elif verdict == "good":
                 rv.strengths.append(Lesson("3분 안에 풀캠", f"3:00까지 6캠프를 다 먹었어요.", 1, ev))
 
@@ -311,7 +332,7 @@ class Reviewer:
             if verdict == "bad":
                 rv.lessons.append(Lesson("10분까지 정글 몬스터를 덜 먹었음",
                                          f"10분 정글 CS {mine10}로 고티어 평균({avg10:.0f})의 {r * 100:.0f}%예요. "
-                                         f"갱·싸움 사이사이 리젠된 캠프를 놓치지 말고 챙기세요.", 2, ev))
+                                         f"갱·싸움 사이사이 리젠된 캠프를 놓치지 말고 챙기세요.", 1 if me["win"] else 2, ev))
 
         # 3) 골드 차 vs 적 정글
         if ejg:
@@ -372,7 +393,7 @@ class Reviewer:
                 text += "상대 정글이나 강가에서 죽었다면, 들어가기 전에 미니맵으로 상대 정글과 라인에 안 보이는 적부터 확인하세요."
             else:
                 text += "죽기 직전 상황을 리플레이로 확인해 보세요."
-            rv.lessons.append(Lesson(f"{mmss(t)} 데스", text, 3 if t < 360 else 2, ev))
+            rv.lessons.append(Lesson(f"{mmss(t)} 데스", text, 3 if t < 600 else 2, ev))
 
         # 5) 적 정글 갱을 막지 못한 순간 (10분 전, 아군 사망 + 적 정글 관여, 내가 멀리 있음)
         if ejg:
@@ -420,7 +441,12 @@ class Reviewer:
             t = e["ts_ms"] / 1000
             # 유충처럼 연달아 잡히는 오브젝트는 3분 안의 것은 한 번만 피드백
             recent = lost_once.get(e["monster_type"])
-            if not ours and d > FAR and (recent is None or t - recent > 180):
+            trade = self.trade(events, e["ts_ms"], team) if not ours and d > FAR else None
+            if trade:
+                ev = [self.mine(f"{mmss(t)} 상대 {obj} 때 우리 팀이 얻은 것: {trade}")]
+                rv.strengths.append(Lesson(f"{mmss(t)} {obj} 맞교환", f"{josa(obj, '을를')} 내준 대신 {trade} 챙겼어요.", 1, ev))
+                rv.facts["traded"] = rv.facts.get("traded", 0) + 1
+            elif not ours and d > FAR and (recent is None or t - recent > 180):
                 lost_once[e["monster_type"]] = t
                 rv.facts["far_lost"] = rv.facts.get("far_lost", 0) + 1
                 med = {"DRAGON": times.get("first_dragon_median_s"), "HORDE": times.get("first_grub_median_s"),
@@ -433,8 +459,9 @@ class Reviewer:
                     f"{mmss(t)} {obj} 합류 못 하고 내줌",
                     f"상대가 {josa(obj, '을를')} 가져갈 때 나는 {d:,.0f} 거리(맵 약 {d / 14870 * 100:.0f}%)에 있었어요. "
                     + (f"고티어 기준 첫 {josa(obj)} 보통 {mmss(med)}쯤 잡히니, 1분 전에 귀환하고 근처 라인 주도권을 잡은 뒤 자리 잡았어야 해요."
-                       if med else "오브젝트 나오기 1분 전에는 귀환해서 정비하고 근처에 있어야 해요."),
-                    2, ev))
+                       if med else "오브젝트 나오기 1분 전에는 귀환해서 정비하고 근처에 있어야 해요.")
+                    + " 반대편에서 얻은 것(포탑·오브젝트·킬)도 없었어요.",
+                    3, ev))
             elif ours:
                 ev = [self.mine(f"{mmss(t)} 우리 팀 {obj} 먹음")]
                 rv.strengths.append(Lesson(f"{mmss(t)} {obj} 획득", f"{josa(obj, '을를')} 챙겼어요.", 1, ev))

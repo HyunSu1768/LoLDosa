@@ -138,7 +138,7 @@ async function loadHome() {
     return `<div class="skill" onclick="openConcept('${s.id}')">
       <div class="skill-top"><b>${esc(s.title)}</b>${f && s.id === f.id ? '<span class="pill on">연습 중</span>' : ""}</div>
       <div class="bar"><i style="width:${rate == null ? 0 : Math.max(4, Math.round(rate * 100))}%" class="${rate == null ? "" : rate >= 0.7 ? "good" : rate >= 0.4 ? "mid" : "bad"}"></i></div>
-      <div class="muted">${rate == null ? "아직 기록 없음" : `최근 ${s.total}판 중 ${s.pass}번 지킴`}</div></div>`;
+      <div class="muted">${rate == null ? "아직 기록 없음" : `최근 ${s.total}판 중 ${s.pass}번 지킴${s.total < 5 ? " · 판 수가 적어 참고만" : ""}`}</div></div>`;
   }).join("");
   const todo = [];
   if (!h.stats_ready) todo.push("터미널에서 <code>uv run loldosa update</code> 로 고티어 데이터를 먼저 모으세요.");

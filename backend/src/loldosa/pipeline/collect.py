@@ -21,6 +21,9 @@ log = logging.getLogger(__name__)
 
 SOLO_QUEUE_ID = 420
 DIVISIONS = ("I", "II", "III", "IV")
+# 버킷 = 티어. apex 는 마스터 이상 묶음
+TIER_BUCKETS = ("diamond", "emerald", "platinum")
+BUCKETS = ("apex",) + TIER_BUCKETS
 
 
 @dataclass
@@ -42,13 +45,13 @@ async def seed_players(riot: RiotClient, store: MatchStore, cfg: CollectConfig) 
             league = await riot.apex_league(tier)
             entries = [dict(e, tier=league.get("tier", tier.upper())) for e in (league or {}).get("entries", [])]
             total += store.upsert_players(entries, "apex")
-    elif cfg.bucket == "platinum":
+    elif cfg.bucket in TIER_BUCKETS:
         for div in DIVISIONS:
             for page in range(1, cfg.plat_pages + 1):
-                entries = await riot.league_entries("PLATINUM", div, page)
+                entries = await riot.league_entries(cfg.bucket.upper(), div, page)
                 if not entries:
                     break
-                total += store.upsert_players(entries, "platinum")
+                total += store.upsert_players(entries, cfg.bucket)
     else:
         raise ValueError(f"unknown bucket {cfg.bucket}")
     return total
