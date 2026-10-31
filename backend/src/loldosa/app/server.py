@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import json
 from dataclasses import asdict
 import logging
@@ -154,13 +155,37 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
 
         try:
             async for ev in watch_game_end(log_dir=DIAG):
-                asyncio.create_task(postgame(ev["game_id"]))
+                if ev["type"] == "start":
+                    asyncio.create_task(record_live(ev["game_id"]))
+                else:
+                    asyncio.create_task(postgame(ev["game_id"]))
         except asyncio.CancelledError:
             raise
         except Exception:
             log.exception("게임 종료 감시 중 오류")
 
+    LIVE_DIR = settings.data_dir / "livegame"
+    live_tasks: dict[int, asyncio.Task] = {}
+
+    async def record_live(game_id: int) -> None:
+        """게임 중 초 단위 기록 (Live Client Data API). 화면에는 아무것도 띄우지 않는다."""
+        from ..lcu.livegame import record
+
+        task = asyncio.current_task()
+        live_tasks[game_id] = task
+        try:
+            path = await record(LIVE_DIR, game_id, url=os.getenv("LOLDOSA_LIVE_URL", "https://127.0.0.1:2999/liveclientdata/allgamedata"))
+            log.info("live record %s → %s", game_id, path)
+        except Exception:
+            log.exception("게임 중 기록 실패")
+
     async def postgame(game_id: int, tries: int = 20, wait_s: float = 30.0) -> dict | None:
+        t = live_tasks.pop(game_id, None)
+        if t and not t.done():  # 기록이 파일로 저장될 때까지 잠깐 기다린다
+            try:
+                await asyncio.wait_for(asyncio.shield(t), timeout=15)
+            except asyncio.TimeoutError:
+                pass
         from ..riot.client import RiotClient
 
         mid = f"{settings.platform.upper()}_{game_id}"
@@ -210,7 +235,8 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
                 "win": sm.get("win"), "is_jungle": rv.get("is_jungle"),
                 "lesson": {"title": lesson.get("title"), "text": lesson.get("text")} if lesson else None,
                 "focus": {"title": focus["title"], "status": focus["status"], "value": focus["value"]} if focus else None,
-                "gap": worst}
+                "gap": worst,
+                "live": (rv.get("live") or {}).get("text")}
 
     @app.post("/api/postgame/test")
     async def postgame_test(body: dict = Body(...)):
@@ -534,6 +560,10 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
         for l in rv["lessons"] + rv["strengths"]:
             l["concepts"] = [{"id": c, "title": by_id[c]["title"]} for c in l["concepts"] if c in by_id]
         rv["key_lesson"] = key_lesson(rv)
+        from ..lcu.livegame import load as load_live, summarize as live_summary
+
+        rec = load_live(LIVE_DIR, int(match_id.split("_")[-1])) if "_" in match_id else None
+        rv["live"] = live_summary(rec) if rec else None
         gap_cache.clear()
         return rv
 

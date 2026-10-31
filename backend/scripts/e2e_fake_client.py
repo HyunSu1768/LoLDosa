@@ -39,13 +39,13 @@ def fake_lcu(game_id: int) -> tuple[FastAPI, dict]:
         import base64
 
         want = "Basic " + base64.b64encode(f"riot:{PASSWORD}".encode()).decode()
-        if request.headers.get("authorization") != want:
+        if not request.url.path.startswith("/liveclientdata") and request.headers.get("authorization") != want:
             return JSONResponse({"message": "unauthorized"}, 401)
         state["calls"] += 1
         return await call_next(request)
 
     def advance():
-        # 챔선 녹화본을 1.2초마다 한 단계씩, 끝나면 게임 시작 → 6초 뒤 종료
+        # 챔선 녹화본을 1.2초마다 한 단계씩, 끝나면 게임 시작 → 6초 뒤 종료 (게임 중 기록은 인증 없이 2999 처럼)
         el = time.time() - state["t0"]
         state["i"] = min(int(el / 1.2), len(sessions))
         if state["i"] >= len(sessions):
@@ -67,6 +67,20 @@ def fake_lcu(game_id: int) -> tuple[FastAPI, dict]:
     @app.get("/lol-gameflow/v1/session")
     async def gf_session():
         return {"phase": state["phase"], "gameData": {"gameId": game_id, "queue": {"id": 420}}}
+
+    @app.get("/liveclientdata/allgamedata")
+    async def live():
+        # 게임 중 Live Client Data API 흉내: 게임 시간은 실제 1초 = 게임 60초로 빨리 감기
+        advance()
+        if state["phase"] != "InProgress":
+            return JSONResponse({}, 404)
+        gt = (time.time() - state["t0"] - len(sessions) * 1.2) * 60
+        lvl = 1 + min(int(gt // 75), 8)
+        gold = 500 + int(gt * 3) % 1600
+        return {"activePlayer": {"riotId": "fake#KR1", "level": lvl, "currentGold": gold},
+                "allPlayers": [{"riotId": "fake#KR1", "isDead": False, "items": [{"itemID": 1039 + int(gt // 300)}],
+                                "scores": {"creepScore": int(gt / 8), "kills": 0, "deaths": 0, "assists": 0}}],
+                "gameData": {"gameTime": gt}, "events": {"Events": []}}
 
     @app.get("/lol-summoner/v1/current-summoner")
     async def summoner():
@@ -91,7 +105,8 @@ async def main() -> int:
                                         ssl_keyfile=str(work / "k.pem"), ssl_certfile=str(work / "c.pem")))
     lcu_task = asyncio.create_task(lcu.serve())
 
-    env = {**os.environ, "LOLDOSA_DATA_DIR": str(data), "LOLDOSA_LOCKFILE": str(work / "lockfile")}
+    env = {**os.environ, "LOLDOSA_DATA_DIR": str(data), "LOLDOSA_LOCKFILE": str(work / "lockfile"),
+           "LOLDOSA_LIVE_URL": f"https://127.0.0.1:{lport}/liveclientdata/allgamedata"}
     app = subprocess.Popen([sys.executable, "-m", "loldosa.cli", "app", "--browser", "--no-ai", "--port", str(aport)],
                            env=env, cwd=ROOT, stdout=open(work / "app.log", "w"), stderr=subprocess.STDOUT)
     got = {"stages": [], "postgame": None, "errors": []}
@@ -136,10 +151,11 @@ async def main() -> int:
         "알림에 핵심/챌린저 차이": bool(pg.get("lesson") or pg.get("gap")),
         "진단 기록(챔선)": any(n.startswith("champselect_") for n in got.get("diagnostics", [])),
         "진단 기록(게임 단계)": any(n.startswith("gameflow_") for n in got.get("diagnostics", [])),
+        "게임 중 초 단위 기록 → 복기 반영": bool((pg.get("live") or {}).get("levels")),
         "오류 메시지 없음": not got["errors"],
     }
     print(json.dumps({"stages": got["stages"], "postgame": {k: pg.get(k) for k in ("status", "match_id", "champion")},
-                      "lesson": (pg.get("lesson") or {}).get("title"), "gap": (pg.get("gap") or {}).get("label"),
+                      "lesson": (pg.get("lesson") or {}).get("title"), "gap": (pg.get("gap") or {}).get("label"), "live": pg.get("live"),
                       "diagnostics": got.get("diagnostics"), "lcu_calls": lstate["calls"]}, ensure_ascii=False, indent=1))
     for k, v in checks.items():
         print(("✅ " if v else "❌ ") + k)

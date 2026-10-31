@@ -449,6 +449,7 @@ function onPostgame(msg) {
     <div class="pg-title">방금 판 · ${esc(msg.champion || "")} ${res}</div>
     ${msg.focus ? `<div class="pg-focus ${msg.focus.status}">연습 목표 <b>${esc(msg.focus.title)}</b> ${msg.focus.status === "pass" ? "지킴 ✓" : "못 지킴 ✗"}<div class="muted">${esc(msg.focus.value)}</div></div>` : ""}
     ${msg.lesson && msg.lesson.title ? `<div class="pg-lesson"><div class="label">이번 판 핵심 하나</div><b>${esc(msg.lesson.title)}</b><p>${linkify(msg.lesson.text || "")}</p></div>` : `<div class="pg-lesson"><b>눈에 띄는 큰 실수는 없었어요 👍</b></div>`}
+    ${msg.live && msg.live.rich ? `<div class="pg-gap">⏱ ${esc(msg.live.rich)}</div>` : ""}
     ${msg.gap ? `<div class="pg-gap">챌린저와 차이: <b>${esc(msg.gap.label)}</b> ${esc(msg.gap.mine_text)} (기준 ${esc(msg.gap.threshold_text)}) · ${esc(msg.gap.drill)}</div>` : ""}
     <div class="row"><button class="primary" onclick="openPostgame('${msg.match_id}', '${seenKey}')">자세히 복기하기</button></div></div>`;
   try { if (window.Notification && Notification.permission === "granted") new Notification("LoLDosa · 방금 판 복기", { body: (msg.lesson && msg.lesson.title) || "복기가 준비됐어요" }); } catch (e) {}
@@ -544,6 +545,13 @@ async function openReview(id) {
       ${keyCard}
       <div id="moments-box"><h3 class="sec">그 순간으로 돌아가기</h3><p class="muted">이 판의 판단 지점을 불러오는 중…</p></div>
       ${checks}
+      ${rv.live && rv.live.samples > 10 ? `<h3 class="sec">초 단위 기록 <span class="muted">게임 중 내 PC 에서 2초마다 기록 (Riot 공식 Live Client Data API) · 15분까지</span></h3>
+        <ul class="live-facts">
+          ${rv.live.text.levels ? `<li><b>레벨</b> ${esc(rv.live.text.levels)}</li>` : ""}
+          ${rv.live.text.shops ? `<li><b>상점 (귀환)</b> ${esc(rv.live.text.shops)}</li>` : ""}
+          <li><b>골드</b> ${esc(rv.live.text.rich)} ${rv.live.rich_s >= 60 ? `<span class="bad">— 1,200골드가 모이면 싸우기 전에 귀환부터</span>` : ""}</li>
+          ${rv.live.text.idle ? `<li><b>CS·킬 관여가 1분 넘게 멈춘 구간</b> ${esc(rv.live.text.idle)} <span class="muted">(이동·시야 작업이었는지 리플레이로 확인해 보세요)</span></li>` : ""}
+        </ul>` : ""}
       ${rv.gap && rv.gap.length ? `<h3 class="sec">이번 판 실력 지표 <span class="muted">고수와 플래티넘을 실제로 가르는 지표만 · 기준선 = 고수 4명 중 3명이 넘는 선</span></h3>
         <table class="metrics gap-table"><tr><th>지표</th><th>이번 판</th><th>기준선</th><th>플래티넘</th><th>챌린저</th></tr>
         ${rv.gap.map((x) => `<tr onclick="openConcept('${x.concept}')"><td>${esc(x.label)}</td><td class="${x.ok ? "good" : "bad"}">${esc(x.mine_text)} ${x.ok ? "✓" : "✗"}</td>

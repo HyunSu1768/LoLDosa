@@ -52,7 +52,7 @@ class GameEndDetector:
 
 
 async def watch_game_end(interval: float = 3.0, log_dir: Path | None = None) -> AsyncIterator[dict]:
-    """끝난 솔랭마다 yield. log_dir 가 있으면 단계 변화를 진단 기록으로 남긴다."""
+    """솔랭이 시작되면 {"type": "start"}, 끝나면 {"type": "end"} 를 yield. log_dir 가 있으면 단계 변화를 진단 기록으로."""
     det = GameEndDetector()
     client: LcuClient | None = None
     last_phase = None
@@ -78,9 +78,13 @@ async def watch_game_end(interval: float = 3.0, log_dir: Path | None = None) -> 
                 if log_dir:
                     diag_write(log_dir, "gameflow", {"phase": phase,
                                                     "game_id": ((session or {}).get("gameData") or {}).get("gameId")})
+            before = (det.current or {}).get("game_id")
             ev = det.feed(phase, session)
+            now = det.current
+            if now and now["game_id"] != before and (not det.queues or now["queue_id"] in det.queues):
+                yield {"type": "start", **now}
             if ev:
-                yield ev
+                yield {"type": "end", **ev}
             await asyncio.sleep(interval)
     finally:
         if client is not None:
