@@ -322,3 +322,20 @@ class StatsDB:
             return None
         w, p = self._w(s)
         return self.one(f"SELECT * FROM first_recall WHERE {w} AND champion_id=?", p + [champ])
+
+    # ---- 판단 훈련 ------------------------------------------------------------
+
+    def decision_pool(self, minute: int, bucket: str = "apex") -> tuple[list[dict], str]:
+        """같은 시간대(±1분) 정글러 상황들. 마스터+ 표본이 적으면 전체 티어."""
+        if not self._has("decision_states"):
+            return [], ""
+        for b, label in ((bucket, BUCKET_KO.get(bucket, bucket)), (None, "전체 수집 티어")):
+            q = "SELECT * FROM decision_states WHERE minute BETWEEN ? AND ?"
+            params: list = [minute - 1, minute + 1]
+            if b:
+                q += " AND bucket = ?"
+                params.append(b)
+            rows = self.rows(q, params)
+            if len(rows) >= 150 or b is None:
+                return rows, label
+        return [], ""

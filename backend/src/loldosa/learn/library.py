@@ -33,6 +33,7 @@ class Progress:
         self.data.setdefault("read", {})  # id -> 처음 읽은 시각
         self.data.setdefault("quiz", {})  # id -> {"correct": n, "total": n}
         self.data.setdefault("flags", {})  # id -> [match_id, ...] 리뷰에서 지적된 경기
+        self.data.setdefault("decisions", [])  # 판단 훈련 답: {match_id, minute, choice, good, concepts, at}
         self.data.setdefault("checks", {})  # match_id -> {"date":..., "champion":..., "checks": [...]}
 
     def save(self) -> None:
@@ -64,6 +65,14 @@ class Progress:
             return
         self.data["checks"][match_id] = {"date": summary.get("date"), "champion": summary.get("champion"),
                                          "win": summary.get("win"), "checks": checks}
+        self.save()
+
+    def record_decision(self, match_id: str, minute: int, choice: str, good: bool, concepts: list[str]) -> None:
+        self.data["decisions"] = [d for d in self.data["decisions"]
+                                  if not (d["match_id"] == match_id and d["minute"] == minute)]
+        self.data["decisions"].append({"match_id": match_id, "minute": minute, "choice": choice, "good": good,
+                                       "concepts": concepts,
+                                       "at": datetime.now(timezone.utc).isoformat(timespec="seconds")})
         self.save()
 
     def history(self, concept: str | None = None, limit: int = 20) -> list[dict]:

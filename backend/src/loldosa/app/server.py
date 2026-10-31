@@ -380,6 +380,39 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
         except KeyError as e:
             raise HTTPException(404, str(e))
 
+    @app.get("/api/review/{match_id}/moments")
+    async def review_moments(match_id: str):
+        """그 순간으로 돌아가기: 판단 지점 + 비슷한 상황의 고티어 선택."""
+        from ..review.moments import build_moments
+
+        if not user.puuid:
+            raise HTTPException(400, "먼저 Riot ID로 경기를 불러오세요")
+
+        def work():
+            with personal_store() as st, stats.session():
+                return build_moments(st.con, stats, champs, match_id, user.puuid)
+
+        async with personal_lock:
+            moments = await asyncio.to_thread(work)
+        for mo in moments:
+            mo["concepts"] = [{"id": c, "title": by_id[c]["title"]} for c in mo["concepts"] if c in by_id]
+        return moments
+
+    @app.post("/api/moments/answer")
+    async def moment_answer(body: dict = Body(...)):
+        progress.record_decision(body.get("match_id", ""), int(body.get("minute", 0)), body.get("choice", ""),
+                                 bool(body.get("good")), body.get("concepts") or [])
+        return {"ok": True}
+
+    @app.post("/api/replay/{match_id}")
+    async def open_replay(match_id: str, body: dict = Body(default={})):
+        """롤 클라이언트에서 그 경기 리플레이를 열고 그 시각으로 이동."""
+        from ..lcu.game_replay import open_replay_at
+
+        statuses: list[str] = []
+        res = await open_replay_at(match_id, float(body.get("t", 0)), on_status=statuses.append)
+        return {**res, "log": statuses}
+
     @app.post("/api/review/{match_id}/ai")
     async def review_ai(match_id: str):
         if not coach:

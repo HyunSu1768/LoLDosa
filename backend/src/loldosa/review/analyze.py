@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import asdict, dataclass, field
 
 from ..analysis.geometry import CAMP_KO, map_side, region, relative_region, team_camps
@@ -57,6 +58,7 @@ class Lesson:
     severity: int  # 클수록 중요
     evidence: list[str] = field(default_factory=list)
     concepts: list[str] = field(default_factory=list)  # 학습 탭 개념 id
+    t: float | None = None  # 경기 시각(초) — 리플레이 이동용
 
 
 @dataclass
@@ -169,6 +171,9 @@ class Reviewer:
         rv.lessons.sort(key=lambda l: -l.severity)
         for l in rv.lessons + rv.strengths:
             l.concepts = lesson_concepts(l.title)
+            m = re.match(r"(\d+):(\d{2})", l.title)
+            if m:
+                l.t = int(m.group(1)) * 60 + int(m.group(2))
         if rv.is_jungle:
             from ..learn.skills import evaluate
             rv.checks = evaluate(rv.facts)

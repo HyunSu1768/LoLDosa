@@ -392,6 +392,7 @@ async function openReview(id) {
         <div class="concept-box"><div class="label">관련 개념 · ${esc(kl.concept.title)}</div><p>${linkify(kl.concept.summary || "")}</p>
           ${kl.concept.how && kl.concept.how.length ? `<ol class="how">${kl.concept.how.slice(0, 3).map((x) => `<li>${linkify(x)}</li>`).join("")}</ol>` : ""}
           <div class="row"><button class="primary" onclick="openConcept('${kl.concept.id}')">개념 배우기</button>
+          ${kl.lesson.t != null ? `<button class="ghost" onclick="openReplay('${id}', ${kl.lesson.t})">🎬 리플레이로 보기</button>` : ""}
           ${rv.checks.some((c) => c.concept === kl.concept.id) && !(focus && focus.concept === kl.concept.id) ? `<button class="ghost" onclick="setFocusFromReview('${kl.concept.id}')">다음 판 연습 목표로</button>` : ""}</div></div>
       </div>` : (rv.is_jungle ? `<div class="key-lesson good"><h2>눈에 띄는 큰 실수가 없었어요 👍</h2><p>아래 체크에서 지킨 것과 놓친 것을 확인해 보세요.</p></div>` : "");
     const checks = rv.checks.length ? `<h3 class="sec">목표 체크 <span class="muted">경기 기록으로 체크 · 누르면 설명 보기</span></h3><div class="checks">${rv.checks.filter((c) => c.status !== "na").map((c) =>
@@ -409,6 +410,7 @@ async function openReview(id) {
         ${focus && focus.status !== "na" ? `<div class="focus-result ${focus.status}">연습 목표 <b>${esc(focus.title)}</b><br>${focus.status === "pass" ? "지킴 ✓" : "못 지킴 ✗"} · ${esc(focus.value)}</div>` : ""}</div>
       ${rv.notes.map((n) => `<div class="note">${linkify(n)}</div>`).join("")}
       ${keyCard}
+      <div id="moments-box"><h3 class="sec">그 순간으로 돌아가기</h3><p class="muted">이 판의 판단 지점을 불러오는 중…</p></div>
       ${checks}
       ${others ? `<h3 class="sec">그 밖에 고칠 점</h3>${others}` : ""}
       ${strengths ? `<h3 class="sec">잘한 점</h3><div class="strengths">${strengths}</div>` : ""}
@@ -417,6 +419,7 @@ async function openReview(id) {
         <div class="rv-grid"><div>${minimap(rv)}</div><div><ul class="moments">${moments}</ul></div></div>
         ${metrics ? `<table class="metrics"><tr><th>항목</th><th>나</th><th>고티어 (${esc(rv.scope_label)})</th><th></th></tr>${metrics}</table>` : ""}
       </details>`;
+    loadMoments(id);
     $("rv-ai-btn").onclick = async () => {
       const btn = $("rv-ai-btn");
       btn.disabled = true; btn.textContent = "정리 중… (10~20초)";
@@ -429,6 +432,80 @@ async function openReview(id) {
     };
   } catch (e) { box.innerHTML = `<p class="muted">${esc(e.message)}</p>`; }
 }
+/* ---------- 그 순간으로 돌아가기 (판단 훈련) ---------- */
+function snapshotMap(snap, size = 300) {
+  const M = 14870, px = (x) => (x / M) * size, py = (y) => size - (y / M) * size;
+  const units = snap.units.map((u) => {
+    const r = u.me ? 15 : 11;
+    const color = u.me ? "#f0d79a" : u.ally ? "#4aa3ff" : "#ff5f66";
+    return `<div class="unit ${u.me ? "me" : ""}" style="left:${px(u.x) - r}px;top:${py(u.y) - r}px;width:${r * 2}px;height:${r * 2}px;border-color:${color}"
+      title="${esc(u.name)} · Lv${u.level}${u.hp != null ? ` · 체력 ${u.hp}%` : ""}${u.enemy_jungler ? " · 상대 정글" : ""}">${imgTag(u.key)}
+      ${u.hp != null ? `<i class="hpbar" style="width:${u.hp}%"></i>` : ""}</div>`;
+  }).join("");
+  const objs = snap.objectives.map((o) => `<div class="objmark" style="left:${px(o.x) - 30}px;top:${py(o.y) - 10}px">${esc(o.name)}<br><b>${esc(o.text)}</b></div>`).join("");
+  return `<div class="snapmap" style="width:${size}px;height:${size}px"><img class="bg" src="https://ddragon.leagueoflegends.com/cdn/${ddragon}/img/map/map11.png" alt="" onerror="this.remove()">${objs}${units}</div>`;
+}
+
+async function loadMoments(matchId) {
+  const box = $("moments-box");
+  try {
+    const list = await api(`/api/review/${matchId}/moments`);
+    if (!list.length) { box.innerHTML = ""; return; }
+    box.innerHTML = `<h3 class="sec">그 순간으로 돌아가기 <span class="muted">먼저 직접 골라 보고, 고티어는 비슷한 상황에서 뭘 했는지 확인해요</span></h3>
+      ${list.map((mo, i) => `<div class="moment" id="mo-${i}">
+        <div class="mo-head"><span class="mo-time">${mo.minute}:00</span> ${esc(mo.reason)}</div>
+        <div class="mo-body">${snapshotMap(mo.snapshot)}
+          <div class="mo-side"><ul class="mo-facts">${mo.snapshot.facts.map((f) => `<li>${linkify(f)}</li>`).join("")}</ul>
+            <div class="mo-q">여기서 뭐 할래요?</div>
+            <div class="mo-choices">${mo.choices.map((c) => `<button class="choice" data-a="${c.action}">${esc(c.label)}</button>`).join("")}</div>
+            <div class="mo-reveal hidden"></div></div></div></div>`).join("")}`;
+    list.forEach((mo, i) => {
+      const card = $(`mo-${i}`);
+      card.querySelectorAll(".mo-choices .choice").forEach((btn) => (btn.onclick = () => revealMoment(matchId, mo, card, btn.dataset.a)));
+    });
+  } catch (e) { box.innerHTML = `<p class="muted">${esc(e.message)}</p>`; }
+}
+
+function revealMoment(matchId, mo, card, choice) {
+  if (card.dataset.done) return;
+  card.dataset.done = "1";
+  const good = mo.good.includes(choice);
+  card.querySelectorAll(".mo-choices .choice").forEach((b) => {
+    if (b.dataset.a === choice) b.classList.add(good ? "right" : "wrong");
+    if (mo.good.includes(b.dataset.a)) b.classList.add("right");
+  });
+  const fmtSwing = (v) => (v == null ? "-" : `${v >= 0 ? "+" : ""}${Math.round(v).toLocaleString()}`);
+  const bars = mo.crowd.slice(0, 6).map((c) => `<div class="crowd-row ${c.action === mo.mine.action ? "mine" : ""} ${c.action === choice ? "picked" : ""}">
+      <span class="cl">${esc(c.label)}</span><span class="cbar"><i style="width:${Math.round(c.share * 100)}%"></i></span>
+      <span class="cs">${Math.round(c.share * 100)}%</span>
+      <span class="co">팀 골드 ${fmtSwing(c.swing)} · 데스 ${Math.round(c.died * 100)}%</span></div>`).join("");
+  const mineOut = `${mo.mine.label} → 2분 뒤 팀 골드 ${fmtSwing(mo.mine.swing)}${mo.mine.died ? " · 내가 죽음" : ""}${mo.mine.obj > 0 ? " · 오브젝트 획득" : mo.mine.obj < 0 ? " · 오브젝트 내줌" : ""}`;
+  const rv = card.querySelector(".mo-reveal");
+  rv.classList.remove("hidden");
+  rv.innerHTML = `<div class="mo-verdict ${good ? "good" : "bad"}">${good ? "좋은 선택이에요" : "고티어는 다르게 많이 골랐어요"} — ${esc(mo.verdict)}</div>
+    <div class="mo-mine">실제로 내가 한 것: <b>${esc(mineOut)}</b></div>
+    <div class="crowd"><div class="muted">비슷한 상황의 ${esc(mo.pool_label)} 정글러 ${mo.k}명이 다음 1분에 한 것과 2분 뒤 결과</div>${bars}</div>
+    ${conceptChipsFor(mo.concepts)}
+    <button class="ghost small" onclick="openReplay('${matchId}', ${mo.t})">🎬 리플레이로 이 장면 보기</button>
+    <p class="muted">결과는 '그 행동을 한 판들'의 평균이라 상황이 조금씩 달라요. 같은 행동도 실행에 따라 결과가 달라질 수 있어요.</p>`;
+  api("/api/moments/answer", { method: "POST", body: JSON.stringify({ match_id: matchId, minute: mo.minute, choice, good,
+    concepts: mo.concepts.map((c) => c.id) }) }).catch(() => {});
+}
+
+function conceptChipsFor(list) {
+  return (list || []).length ? `<div>${list.map((c) => `<button class="chip-link" onclick="openConcept('${c.id}')">📘 ${esc(c.title)}</button>`).join("")}</div>` : "";
+}
+
+async function openReplay(matchId, t) {
+  openModal(`<h2>리플레이 여는 중…</h2><p class="muted">롤 클라이언트에서 이 경기 리플레이를 받고, ${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")} 조금 앞으로 이동해요. 최대 1~2분 걸릴 수 있어요.</p>`);
+  try {
+    const r = await api(`/api/replay/${matchId}`, { method: "POST", body: JSON.stringify({ t }) });
+    openModal(`<h2>${r.status === "ok" ? "리플레이를 열었어요" : "리플레이를 열지 못했어요"}</h2><p>${esc(r.message || "")}</p>
+      ${(r.log || []).length ? `<details class="more"><summary>진행 기록</summary><ul>${r.log.map((l) => `<li class="muted">${esc(l)}</li>`).join("")}</ul></details>` : ""}`);
+  } catch (e) { openModal(`<h2>리플레이를 열지 못했어요</h2><p>${esc(e.message)}</p>`); }
+}
+window.openReplay = openReplay;
+
 async function setFocusFromReview(id) {
   await api("/api/focus", { method: "PUT", body: JSON.stringify({ concept: id }) });
   openModal(`<h2>다음 판 연습 목표로 정했어요</h2><p>게임 전 브리핑 맨 위에 이 목표가 나오고, 경기 후 복기에서 지켰는지 체크해요.</p>

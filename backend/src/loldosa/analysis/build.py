@@ -479,6 +479,14 @@ def build_stats(data_dir: Path, champs: ChampionIndex) -> dict[str, int]:
             con.execute(f"CREATE TABLE {name} AS " + sql.format(ad_cut=AD_CUT, ap_cut=AP_CUT)).fetchall()
             counts[name] = con.execute(f"SELECT count(*) FROM {name}").fetchall()[0][0]
 
+        # 판단 훈련: 정글러의 분 단위 상황 → 다음 행동 → 결과
+        from .decisions import STATE_COLUMNS, build_states
+        rows = build_states(con, "src.")
+        con.register("_ds", pa.Table.from_pydict({c: [r[i] for r in rows] for i, c in enumerate(STATE_COLUMNS)}))
+        con.execute("CREATE TABLE decision_states AS SELECT * FROM _ds").fetchall()
+        con.unregister("_ds")
+        counts["decision_states"] = len(rows)
+
         pro = data_dir / "pro.duckdb"
         if pro.exists():
             con.execute(f"ATTACH '{pro}' AS pro (READ_ONLY)").fetchall()
