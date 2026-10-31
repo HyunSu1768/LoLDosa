@@ -287,10 +287,16 @@ function pickCard(r, { score = true } = {}) {
     <ul>${r.reasons.map((i) => `<li>${esc(i.text)}${evChips(i.evidence)}</li>`).join("")}</ul></div>`;
 }
 
-function focusBanner(f) {
-  if (!f) return "";
-  return `<div class="label">이번 판 연습 목표</div><div class="fb-title">${esc(f.title)} — 🎯 ${esc(f.goal || "")}</div>
-    ${f.how && f.how.length ? `<ol class="how">${f.how.map((x) => `<li>${linkify(x)}</li>`).join("")}</ol>` : ""}`;
+function focusBanner(f, practice) {
+  if (!f && !practice) return "";
+  const graded = f && f.graded !== false;
+  const focusPart = graded ? `<div class="label">이번 판 연습 목표</div><div class="fb-title">${esc(f.title)} — 🎯 ${esc(f.goal || "")}</div>
+    ${f.how && f.how.length ? `<ol class="how">${f.how.map((x) => `<li>${linkify(x)}</li>`).join("")}</ol>` : ""}` : "";
+  const gapPart = practice ? `<div class="fb-gap"><div class="label">챌린저와 가장 큰 차이</div>
+    <b>${esc(practice.label)}</b> · 나 ${esc(practice.mine_text)} → 챌린저 ${esc(practice.target_text)}
+    <div class="fb-drill">이번 판: ${esc(practice.drill)}</div></div>` : "";
+  const stale = f && !graded ? `<div class="muted">지금 연습 목표(${esc(f.title)})는 실제 경기 검증을 통과하지 못해서 채점하지 않아요. 홈에서 새 목표를 골라 주세요.</div>` : "";
+  return focusPart + gapPart + stale;
 }
 
 function onBriefing(msg) {
@@ -304,8 +310,9 @@ function onBriefing(msg) {
   $("matchup-title").textContent = b.my_champion_name ? `${b.my_champion_name}${b.enemy_jungler_name ? ` vs ${b.enemy_jungler_name}` : ""}` : "";
   $("scope").textContent = b.scope_label ? `데이터: ${b.scope_label}` : "";
   const focus = msg.focus || currentFocus;
-  $("focus-banner").classList.toggle("hidden", !focus);
-  $("focus-banner").innerHTML = focusBanner(focus);
+  const practice = msg.practice || currentPractice;
+  $("focus-banner").classList.toggle("hidden", !focus && !practice);
+  $("focus-banner").innerHTML = focusBanner(focus, practice);
   $("notes").innerHTML = b.notes.map((n) => `<div class="note">${linkify(n)}</div>`).join("");
   renderTeams(st);
   const show = b.picks.length || b.bans.length;
@@ -332,7 +339,7 @@ const MONSTER_SAY = { DRAGON: "드래곤", HORDE: "공허 유충", RIFTHERALD: "
 let pathState = null;
 const mmssJs = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
 function eventSay(e) {
-  if (e.kind === "recall") return "귀환 (상점 구매 시각)";
+  if (e.kind === "recall") return e.t < 150 ? "상점 구매 (2분 전 구매라 귀환인지는 확실하지 않아요)" : "귀환 (상점 구매 시각)";
   if (e.kind === "death_back") return "죽고 부활해서 템 구매";
   if (e.kind === "death") return `죽음 · ${REGION_SAY[e.where] || ""}`;
   if (e.kind === "kill") return `킬 · ${REGION_SAY[e.where] || ""}`;
@@ -383,14 +390,15 @@ async function loadStatus() {
     $("status-line").textContent = s.stats && s.stats.built_at ? `고티어 데이터 업데이트 ${s.stats.built_at.replace("T", " ").slice(0, 16)}` : "고티어 데이터 없음 → loldosa update";
   } catch (e) { /* 재시작 중 */ }
 }
-let currentFocus = null;
+let currentFocus = null, currentPractice = null;
 async function idleFocus() {
   try {
     const h = await api("/api/home");
-    currentFocus = h.focus;
-    $("idle-focus").innerHTML = h.focus ? `<div class="focus-banner idle">${focusBanner(h.focus)}</div>` : "";
-    $("focus-banner").classList.toggle("hidden", !h.focus);
-    $("focus-banner").innerHTML = focusBanner(h.focus);
+    currentFocus = h.focus; currentPractice = h.practice;
+    const any = h.focus || h.practice;
+    $("idle-focus").innerHTML = any ? `<div class="focus-banner idle">${focusBanner(h.focus, h.practice)}</div>` : "";
+    $("focus-banner").classList.toggle("hidden", !any);
+    $("focus-banner").innerHTML = focusBanner(h.focus, h.practice);
   } catch (e) { /* noop */ }
 }
 
@@ -769,6 +777,7 @@ async function openConcept(id) {
     <div class="crumb">${esc(cat)} · ${esc(LEVEL_KO[c.level] || "")}${c.flagged ? ` · 내 복기에서 ${c.flagged}판 지적됨` : ""}</div>
     <h1>${esc(c.title)}<span class="en">${esc(c.en || "")}</span></h1>
     <div class="summary">${esc(c.summary || "")}</div>
+    ${c.validation_note ? `<div class="validation-note"><b>📊 실제 경기로 확인한 것</b><p>${esc(c.validation_note)}</p></div>` : ""}
     ${goalBox}
     ${c.definition ? `<h3>무엇인가요</h3><p>${linkify(c.definition)}</p>` : ""}
     ${c.why ? `<h3>왜 중요한가요</h3><p>${linkify(c.why)}</p>` : ""}

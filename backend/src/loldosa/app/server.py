@@ -125,7 +125,8 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
         b = briefing.to_dict()
         await hub.send({"type": "briefing", "state": state_view(state, champs), "briefing": b,
                         "ddragon": champs.version,
-                        "focus": concept_brief(user.focus_concept) if user.focus_concept else None})
+                        "focus": concept_brief(user.focus_concept) if user.focus_concept else None,
+                        "practice": await asyncio.to_thread(top_practice)})
         # AI 는 비용·시간이 들어서 의미 있는 시점에만: 내 픽 확정 직후, 전원 확정
         if coach and user.ai_enabled and state.stage in (Stage.POST_MY_PICK, Stage.FINAL) and b["cards"]:
             key = (state.stage.value, b["my_champion"], b["enemy_jungler"],
@@ -407,6 +408,29 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
                     rows.append({**f, "match_id": m["match_id"], "game_start": m["game_start"]})
         return list(reversed(rows))
 
+    gap_cache: dict = {}
+
+    def top_practice() -> dict | None:
+        """밴픽 화면용: 챌린저와 가장 큰 차이 하나 (10분 캐시, 새 경기 복기 때 비움)."""
+        import time as _t
+
+        from ..analysis.gap import load_reference, personal_gap
+
+        if gap_cache.get("t", 0) > _t.time() - 600:
+            return gap_cache.get("v")
+        v = None
+        ref = load_reference()
+        if ref and user.puuid:
+            try:
+                rows = personal_features(20)
+                if len(rows) >= 3:
+                    g = personal_gap(rows, ref, "challenger", limit=1)
+                    v = g["gaps"][0] if g["gaps"] else None
+            except HTTPException:
+                return gap_cache.get("v")
+        gap_cache.update(t=_t.time(), v=v)
+        return v
+
     @app.get("/api/gap")
     async def gap():
         """챌린저까지 가장 큰 차이: 고수와 플래티넘을 실제로 가르는 지표만으로 내 최근 판을 진단."""
@@ -450,6 +474,7 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
         for l in rv["lessons"] + rv["strengths"]:
             l["concepts"] = [{"id": c, "title": by_id[c]["title"]} for c in l["concepts"] if c in by_id]
         rv["key_lesson"] = key_lesson(rv)
+        gap_cache.clear()
         return rv
 
     METRIC_KEYS = {"3:00까지 먹은 캠프": "camps3", "10분 정글 CS": "cs10", "10분 전 데스": "deaths10",
@@ -500,7 +525,7 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
             return None
         from ..learn.skills import CHECKS, GRADED
         return {"id": cid, "title": c["title"], "summary": c.get("summary"), "how": (c.get("how") or [])[:3],
-                "goal": CHECKS[cid][0] if cid in CHECKS else None}
+                "goal": CHECKS[cid][0] if cid in CHECKS else None, "graded": cid in GRADED}
 
     @app.get("/api/home")
     async def home():
@@ -534,7 +559,7 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
                 "due": len(progress.due_items(999)),
                 "effect": effect_report(progress, user.focus_concept, user.focus_set_at),
                 "rank": rank_label(progress.data["ranks"][-1]) if progress.data["ranks"] else None,
-                "focus": focus, "skills": sorted(skills, key=lambda x: (x["total"] == 0, x["pass"] / max(x["total"], 1))),
+                "practice": top_practice(), "focus": focus, "skills": sorted(skills, key=lambda x: (x["total"] == 0, x["pass"] / max(x["total"], 1))),
                 "suggest": suggest, "recommended": progress.recommended(library),
                 "games_tracked": len(progress.data["checks"]), "stats_ready": stats.available}
 
