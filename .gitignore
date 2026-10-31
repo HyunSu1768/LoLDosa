@@ -1,0 +1,17 @@
+# secrets
+.env
+# local data / caches
+data/
+*.duckdb
+*.sqlite
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+# node / tauri (later)
+node_modules/
+dist/
+target/
+.DS_Store

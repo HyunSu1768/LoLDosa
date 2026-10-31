@@ -75,7 +75,7 @@
 | LCU 연동 | 앱 내부(TS 또는 Rust) | lockfile 파싱, 로컬 TLS, WebSocket 구독 |
 | 수집·분석 | Python (httpx, polars) | 데이터 분석 생태계 |
 | 저장소 | DuckDB(대용량 경기·이벤트), SQLite(KB·설정) | 서버 없이 로컬, 빠른 집계 |
-| 앱 ↔ 분석 연결 | 로컬 FastAPI 사이드카 또는 앱이 DB 직접 조회 | 미결 |
+| 앱 ↔ 분석 연결 | Python 백엔드(LCU 감시·DB 조회·Claude 호출)를 사이드카로 두고, Tauri 앱은 화면만 담당 | 로직을 한 언어로 유지, CLI 로 단독 테스트 가능 |
 | AI | Claude Code CLI 헤드리스 (`claude -p --output-format stream-json`), 구독 로그인 사용 | API 키·종량 과금 불필요. 출처 인용 강제 |
 
 ## 6. 리스크와 제약 (확인 필요)
@@ -99,7 +99,7 @@
 
 ## 8. 확정된 환경 (2026-10-31 추가 답변)
 
-- OS: Windows
+- OS: Windows (주 사용), macOS (테스트용으로 동일하게 지원)
 - Riot API 키: 아직 미발급 → M0에서 발급
 - AI: Claude 구독 플랜으로 동작 (Claude Code CLI 로그인 필요)
 - 본인 티어: 플래티넘 → "내 티어대" 수집 구간은 KR 플래티넘
@@ -107,4 +107,3 @@
 ## 9. 미결 사항
 
 - UI 언어 (한국어 전용인지)
-- 앱 ↔ 분석 연결 방식 (사이드카 vs DB 직접 조회) — 구현 단계에서 결정

@@ -1,0 +1,267 @@
+"""loldosa CLI.
+
+    loldosa doctor                 환경 점검 (키, Claude CLI, 롤 클라이언트, 캐시)
+    loldosa ddragon sync           최신 패치 챔피언 데이터 받기
+    loldosa riot check             Riot API 키 동작 확인 (KR 챌린저 → 경기 1개 타임라인)
+    loldosa lcu status             롤 클라이언트 접속 확인
+    loldosa lcu watch              챔피언 선택 실시간 감시 (--record 로 녹화)
+    loldosa lcu watch --replay F   녹화 파일 재생 (게임 없이 테스트)
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+import logging
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+from .config import load_settings
+from .ddragon import ChampionIndex, load_cached, sync_champions
+from .lcu.champselect import ChampSelectState
+
+
+def _print(msg: str = "") -> None:
+    print(msg, flush=True)
+
+
+# ---- doctor ----------------------------------------------------------------
+
+def cmd_doctor(_args) -> int:
+    from .lcu.connection import find_credentials
+
+    s = load_settings()
+    ok = True
+    _print(f"OS: {sys.platform}")
+    if s.riot_api_key:
+        _print(f"[ok] RIOT_API_KEY 설정됨 ({s.riot_api_key[:10]}…)  platform={s.platform} region={s.region}")
+    else:
+        ok = False
+        _print("[!!] RIOT_API_KEY 없음 → 레포 루트 .env 에 추가하세요 (.env.example 참고)")
+
+    claude = shutil.which("claude")
+    if claude:
+        ver = subprocess.run([claude, "--version"], capture_output=True, text=True).stdout.strip()
+        _print(f"[ok] Claude Code CLI: {ver}  (구독 로그인 상태는 `claude` 실행으로 확인)")
+    else:
+        _print("[--] Claude Code CLI 없음 → AI 브리핑 단계(M4) 전까지는 없어도 됨")
+
+    champs = load_cached(s.data_dir, s.locale)
+    if champs:
+        _print(f"[ok] 챔피언 데이터 캐시: 패치 {champs.version}, {len(champs)}명")
+    else:
+        _print("[--] 챔피언 데이터 없음 → `loldosa ddragon sync`")
+
+    creds = find_credentials()
+    if creds:
+        _print(f"[ok] 롤 클라이언트 감지: port {creds.port}")
+    else:
+        _print("[--] 롤 클라이언트 미실행 (켜져 있는데도 안 잡히면 LOLDOSA_LOCKFILE 로 lockfile 경로 지정)")
+    return 0 if ok else 1
+
+
+# ---- ddragon ---------------------------------------------------------------
+
+def cmd_ddragon_sync(args) -> int:
+    s = load_settings()
+    idx = asyncio.run(sync_champions(s.data_dir, s.locale, args.version))
+    _print(f"패치 {idx.version}: 챔피언 {len(idx)}명 저장 → {s.data_dir / 'ddragon' / idx.version}")
+    return 0
+
+
+# ---- riot ------------------------------------------------------------------
+
+async def _riot_check() -> int:
+    from .riot.client import RiotApiError, RiotClient
+
+    s = load_settings()
+    if not s.riot_api_key:
+        _print("RIOT_API_KEY 가 없습니다.")
+        return 1
+    try:
+        async with RiotClient(s.riot_api_key, s.platform, s.region) as riot:
+            league = await riot.apex_league("challenger")
+            entries = league.get("entries", [])
+            _print(f"[ok] {s.platform.upper()} 챌린저 {len(entries)}명")
+            top = max(entries, key=lambda e: e.get("leaguePoints", 0))
+            _print(f"     1위 LP {top['leaguePoints']}, {top['wins']}승 {top['losses']}패")
+            ids = await riot.match_ids(top["puuid"], count=1)
+            if not ids:
+                _print("[--] 최근 솔랭 경기 없음")
+                return 0
+            tl = await riot.timeline(ids[0])
+            frames = tl["info"]["frames"]
+            _print(f"[ok] 경기 {ids[0]} 타임라인: {len(frames)}프레임(분), 이벤트 {sum(len(f['events']) for f in frames)}개")
+    except RiotApiError as e:
+        _print(f"[!!] {e}")
+        if e.status in (401, 403):
+            _print("     키가 만료됐거나 잘못됐습니다. 개발용 키는 24시간마다 developer.riotgames.com 에서 재발급하세요.")
+        return 1
+    return 0
+
+
+def cmd_riot_check(_args) -> int:
+    return asyncio.run(_riot_check())
+
+
+# ---- lcu -------------------------------------------------------------------
+
+async def _lcu_status() -> int:
+    from .lcu.client import LcuClient
+    from .lcu.connection import find_credentials
+
+    creds = find_credentials()
+    if not creds:
+        _print("롤 클라이언트를 찾지 못했습니다.")
+        return 1
+    client = LcuClient(creds)
+    try:
+        me = await client.current_summoner()
+        phase = await client.gameflow_phase()
+        name = f"{me.get('gameName', '?')}#{me.get('tagLine', '')}" if me else "?"
+        _print(f"접속됨: {name}  현재 단계: {phase}")
+    finally:
+        await client.aclose()
+    return 0
+
+
+def cmd_lcu_status(_args) -> int:
+    return asyncio.run(_lcu_status())
+
+
+POS_KO = {"top": "탑", "jungle": "정글", "middle": "미드", "bottom": "원딜", "utility": "서폿", "": "?"}
+STAGE_KO = {
+    "planning": "선픽 의도 표시",
+    "banning": "밴 진행",
+    "pre_my_pick": "내 픽 전 → 픽/밴 추천 단계",
+    "post_my_pick": "내 픽 확정 → 조합 브리핑 갱신",
+    "final": "전원 확정 → 최종 게임 플랜",
+}
+
+
+def render_state(state: ChampSelectState, champs: ChampionIndex | None) -> str:
+    name = champs.name if champs else (lambda cid: f"#{cid}" if cid else "-")
+
+    def fmt(slot, mine=False):
+        champ = name(slot.shown_champion)
+        if not slot.locked and slot.shown_champion:
+            champ += "(선택중)"
+        mark = " ◀ 나" if mine else ""
+        if not slot.position:  # 솔랭 적팀은 포지션이 공개되지 않음
+            return f"{champ}{mark}"
+        return f"{POS_KO.get(slot.position, slot.position)}:{champ}{mark}"
+
+    lines = [
+        f"── {STAGE_KO[state.stage.value]}  [timer={state.timer_phase}]",
+        "  아군: " + ", ".join(fmt(s, s.cell_id == state.local_cell_id) for s in state.allies),
+        "  적군: " + ", ".join(fmt(s) for s in state.enemies),
+        "  밴  : 아군 " + " ".join(name(b) for b in state.ally_bans)
+        + " / 적군 " + " ".join(name(b) for b in state.enemy_bans),
+    ]
+    if state.me and not state.is_jungle:
+        lines.append(f"  (참고: 이번 판 내 포지션은 {POS_KO.get(state.my_position, state.my_position)})")
+    return "\n".join(lines)
+
+
+async def _lcu_watch(args) -> int:
+    from .lcu.client import watch_champ_select
+    from .lcu.replay import replay
+
+    s = load_settings()
+    champs = load_cached(s.data_dir, s.locale)
+    if champs is None:
+        _print("(챔피언 이름을 보려면 먼저 `loldosa ddragon sync`)")
+
+    if args.replay:
+        source = replay(Path(args.replay), interval=args.interval)
+        _print(f"재생: {args.replay}")
+    else:
+        source = watch_champ_select(interval=args.interval)
+        _print("챔피언 선택을 기다리는 중… (Ctrl+C 종료)")
+
+    record = open(args.record, "a", encoding="utf-8") if args.record else None
+    try:
+        if record:
+            # 녹화는 원본 세션을 그대로 저장해야 하므로 별도 루프
+            return await _record_loop(record, args.interval, champs)
+        async for state in source:
+            _print(render_state(state, champs) if state else "── 챔피언 선택 종료")
+    except KeyboardInterrupt:
+        pass
+    finally:
+        if record:
+            record.close()
+    return 0
+
+
+async def _record_loop(out, interval: float, champs) -> int:
+    from .lcu.champselect import parse_session
+    from .lcu.client import LcuClient
+    from .lcu.connection import find_credentials
+
+    _print(f"녹화 중 → {out.name} (Ctrl+C 종료)")
+    client = None
+    last_raw = None
+    while True:
+        if client is None:
+            creds = find_credentials()
+            if not creds:
+                await asyncio.sleep(3)
+                continue
+            client = LcuClient(creds)
+        session = await client.champ_select_session()
+        raw = json.dumps(session, ensure_ascii=False, sort_keys=True)
+        if raw != last_raw and (session is not None or last_raw is not None):
+            out.write(raw + "\n")
+            out.flush()
+            if session:
+                _print(render_state(parse_session(session), champs))
+            last_raw = raw
+        await asyncio.sleep(interval)
+
+
+def cmd_lcu_watch(args) -> int:
+    try:
+        return asyncio.run(_lcu_watch(args))
+    except KeyboardInterrupt:
+        return 0
+
+
+# ---- main ------------------------------------------------------------------
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="loldosa", description="정글러 챔피언 선택 브리핑 도구")
+    p.add_argument("-v", "--verbose", action="store_true")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    sub.add_parser("doctor", help="환경 점검").set_defaults(func=cmd_doctor)
+
+    dd = sub.add_parser("ddragon", help="Data Dragon").add_subparsers(dest="sub", required=True)
+    sync = dd.add_parser("sync", help="챔피언 데이터 받기")
+    sync.add_argument("--version", help="패치 버전 (기본: 최신)")
+    sync.set_defaults(func=cmd_ddragon_sync)
+
+    riot = sub.add_parser("riot", help="Riot 웹 API").add_subparsers(dest="sub", required=True)
+    riot.add_parser("check", help="API 키 동작 확인").set_defaults(func=cmd_riot_check)
+
+    lcu = sub.add_parser("lcu", help="롤 클라이언트(로컬)").add_subparsers(dest="sub", required=True)
+    lcu.add_parser("status", help="접속 확인").set_defaults(func=cmd_lcu_status)
+    watch = lcu.add_parser("watch", help="챔피언 선택 감시")
+    watch.add_argument("--replay", help="녹화 파일(JSONL) 재생")
+    watch.add_argument("--record", help="실제 챔선을 JSONL 로 녹화")
+    watch.add_argument("--interval", type=float, default=1.0)
+    watch.set_defaults(func=cmd_lcu_watch)
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.WARNING)
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
