@@ -370,3 +370,21 @@ svg.board .tok.enemy circle { fill: #c0565b; } svg.board .tok.enemy text { fill:
 .board-legend { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 6px; }
 .board-legend .muted { flex-basis: 100%; font-size: 11px; }
 .info-checks { margin: 6px 0 0; padding-left: 18px; font-size: 13px; color: var(--text2); } .info-checks li { margin: 4px 0; }
+
+/* 챌린저까지의 거리 */
+.panel.gap { border-color: var(--gold2); }
+.gap-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.gap-score { min-width: 240px; text-align: right; }
+.gap-score .big { font-size: 40px; font-weight: 800; color: var(--gold); line-height: 1; }
+.gap-score .big small { font-size: 16px; margin-left: 2px; }
+.gap-bar { position: relative; height: 8px; background: var(--line); border-radius: 4px; margin: 8px 0 18px; }
+.gap-bar > div { height: 100%; background: linear-gradient(90deg, #5b6b80, var(--gold)); border-radius: 4px; }
+.gap-bar .tick { position: absolute; top: 10px; font-size: 10px; color: var(--muted); }
+.gap-bar .tick.plat { left: 0; } .gap-bar .tick.chal { right: 0; }
+.gap-item { display: grid; grid-template-columns: 34px 1fr 90px; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); align-items: start; }
+.gap-rank { width: 28px; height: 28px; border-radius: 50%; background: var(--gold2); color: #000; font-weight: 800; display: grid; place-items: center; }
+.gap-nums { font-size: 13px; color: var(--text2); margin: 3px 0; }
+.gap-drill { font-size: 13px; color: var(--gold); margin-bottom: 6px; }
+.gap-power { font-size: 11px; color: var(--muted); text-align: right; }
+.gap-strength { margin-top: 10px; font-size: 13px; }
+.small-note { font-size: 12px; margin: -2px 0 6px; }

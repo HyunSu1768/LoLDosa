@@ -1,4 +1,8 @@
-"""검증용: 플래티넘 정글러 N명의 최근 정글 경기를 받아 저장한다."""
+"""검증용: 한 티어 정글러 N명의 최근 정글 경기를 받아 저장한다.
+
+사용: python scripts/fetch_platinum_junglers.py <outdir> <n_players> <games> [TIER] [page]
+출력: <outdir>/validation_<tier>.duckdb (PLATINUM 기본은 validation.duckdb), <outdir>/<tier>_players.json
+"""
 import asyncio
 import json
 import sys
@@ -10,16 +14,18 @@ from loldosa.store.matches import MatchStore
 
 OUT = Path(sys.argv[1])
 N_PLAYERS, GAMES = int(sys.argv[2]), int(sys.argv[3])
+TIER = sys.argv[4] if len(sys.argv) > 4 else "PLATINUM"
+PAGE = int(sys.argv[5]) if len(sys.argv) > 5 else 1
 
 
 async def main():
     s = load_settings()
-    store = MatchStore(OUT, filename="validation.duckdb")
+    store = MatchStore(OUT, filename="validation.duckdb" if TIER == "PLATINUM" and PAGE == 1 else f"validation_{TIER.lower()}_{PAGE}.duckdb")
     picked = {}
     async with RiotClient(s.riot_api_key, s.platform, s.region) as riot:
         entries = []
         for div in ("I", "II", "III", "IV"):
-            entries += await riot.league_entries("PLATINUM", div, 1)
+            entries += await riot.league_entries(TIER, div, PAGE)
         for e in entries:
             if len(picked) >= N_PLAYERS:
                 break
@@ -45,6 +51,7 @@ async def main():
                 picked[e["puuid"]] = {"tier": e["tier"], "rank": e["rank"], "lp": e["leaguePoints"], "matches": jungle}
                 print(len(picked), e["tier"], e["rank"], len(jungle), flush=True)
     store.close()
-    (OUT / "platinum_players.json").write_text(json.dumps(picked))
+    name = "platinum_players.json" if TIER == "PLATINUM" and PAGE == 1 else f"{TIER.lower()}_{PAGE}_players.json"
+    (OUT / name).write_text(json.dumps(picked))
 
 asyncio.run(main())

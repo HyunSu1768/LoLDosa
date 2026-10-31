@@ -105,6 +105,56 @@ CHECKS = {
 }
 
 
+# ---- 챌린저 갭 기준표에서 온 체크 (analysis/gap.py, learn/gap_reference.json) ----------------------------
+# 개념 하나에 지표 하나. 기준선 = 고수(프로·챌린저·마스터+) 하위 25%. 기준표에서 검증된 것만 채점한다.
+GAP_CHECKS = {
+    "communication-pings": "missing_pings",
+    "cross-map": "kp",
+    "level-race": "lv6_time",
+    "sweeping": "ward_kills_pm",
+    "jungle-tracking": "dead_pct",
+}
+
+
+def _gap_ref():
+    from ..analysis.gap import load_reference
+
+    global _REF
+    try:
+        return _REF
+    except NameError:
+        _REF = load_reference()
+        return _REF
+
+
+def _gap_check(key):
+    def fn(f):
+        from ..analysis.gap import BY_KEY, fmt_value
+
+        ref = _gap_ref()
+        r = ref and ref["features"].get(key)
+        if not r or f.get(key) is None:
+            return "na", "-"
+        v, ft = f[key], BY_KEY[key]
+        ok = v >= r["threshold"] if r["higher_better"] else v <= r["threshold"]
+        return ("pass" if ok else "fail"), f"{ft.label} {fmt_value(ft, v)} (고수 기준 {fmt_value(ft, r['threshold'])})"
+    return fn
+
+
+def _gap_goal(key):
+    from ..analysis.gap import BY_KEY, fmt_value
+
+    ref = _gap_ref()
+    r = ref and ref["features"].get(key)
+    ft = BY_KEY[key]
+    if not r:
+        return ft.label
+    return f"{ft.label} {fmt_value(ft, r['threshold'])} {'이상' if r['higher_better'] else '이하'} (고수 4명 중 3명이 넘는 선)"
+
+
+for _cid, _key in GAP_CHECKS.items():
+    CHECKS[_cid] = (_gap_goal(_key), _gap_check(_key))
+
 # 실제 경기 검증 (research_notes/검증/검증 결과.md): 프로 12명 120판·챌린저 8명 96판·플래티넘 10명 63판.
 # 통과율이 고수 그룹에서 확실히 높은 체크만 채점한다. 나머지는 값만 '참고'로 보여주고 달성률·숙련도엔 안 넣는다.
 VALIDATION = {  # concept: (프로, 챌린저, 플래티넘 통과율, 채점 여부)
@@ -115,9 +165,13 @@ VALIDATION = {  # concept: (프로, 챌린저, 플래티넘 통과율, 채점 �
     "objective-setup": (0.67, 0.54, 0.51, False),
     "turn-tempo": (0.44, 0.41, 0.38, False),
     "counter-gank": (0.20, 0.23, 0.11, False),
-    "jungle-tracking": (0.68, 0.71, 0.68, False),
     "power-spikes": (0.90, 0.97, 0.91, False),
 }
+for _cid, _key in GAP_CHECKS.items():
+    _r = (_gap_ref() or {}).get("features", {}).get(_key)
+    if _r:
+        _p = _r["pass"]
+        VALIDATION[_cid] = (_p.get("pro"), _p.get("challenger"), _p.get("platinum"), _r["validated"])
 GRADED = {k for k, v in VALIDATION.items() if v[3]}
 
 

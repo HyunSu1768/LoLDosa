@@ -40,7 +40,7 @@ def test_evaluate_checks():
     assert res["clear-efficiency"] == "pass"
     # 검증에서 티어를 못 가른 체크는 채점하지 않고 참고 값만 남긴다
     assert res["turn-tempo"] == "na" and out["turn-tempo"]["info"] and not out["turn-tempo"]["graded"]
-    assert res["jungle-tracking"] == "na" and out["jungle-tracking"]["info"]
+    assert res["counter-gank"] == "na" and not out["counter-gank"]["graded"]
     # 귀환 체크: 첫 귀환 5:00 넘김 / 골드 들고 죽음만 실패
     assert {c["concept"]: c["status"] for c in evaluate({"first_recall_s": 320})}["recall-timing"] == "fail"
     assert {c["concept"]: c["status"] for c in evaluate({"first_recall_s": 250})}["recall-timing"] == "pass"
@@ -100,3 +100,15 @@ def test_baseline_and_effect(tmp_path):
     assert ef["before"]["focus_pass"] == 0 and ef["after"]["focus_pass"] == 2 and ef["after"]["wins"] == 2
     assert ladder_points({"tier": "EMERALD", "rank": "IV", "lp": 0}) - ladder_points(
         {"tier": "PLATINUM", "rank": "I", "lp": 0}) == 100
+
+
+def test_gap_checks_from_reference():
+    """챌린저 갭 기준표에서 온 체크: 기준선을 넘으면 통과, 값이 없으면 na."""
+    from loldosa.learn.skills import GRADED
+
+    assert "communication-pings" in GRADED and "jungle-tracking" in GRADED
+    res = {c["concept"]: c for c in evaluate({"missing_pings": 9, "dead_pct": 0.05, "kp": 0.2})}
+    assert res["communication-pings"]["status"] == "pass"
+    assert res["jungle-tracking"]["status"] == "pass"
+    assert res["cross-map"]["status"] == "fail"
+    assert res["level-race"]["status"] == "na"

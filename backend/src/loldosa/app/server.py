@@ -304,6 +304,48 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
             with personal_store() as st:
                 return annotate(list_matches(st, user.puuid, 30))
 
+    def personal_features(limit: int = 30) -> list[dict]:
+        """최근 정글 판들의 챌린저 갭 지표 (오래된 판 → 최근 판 순)."""
+        from ..analysis.gap import jungler_features
+        from ..review.sync import list_matches
+
+        rows = []
+        with personal_store() as st:
+            for m in list_matches(st, user.puuid, limit):
+                if m["position"] != "JUNGLE":
+                    continue
+                raw = st.load_raw(m["match_id"])
+                f = jungler_features(raw[0], raw[1], user.puuid) if raw else None
+                if f:
+                    rows.append({**f, "match_id": m["match_id"], "game_start": m["game_start"]})
+        return list(reversed(rows))
+
+    @app.get("/api/gap")
+    async def gap():
+        """챌린저까지 가장 큰 차이: 고수와 플래티넘을 실제로 가르는 지표만으로 내 최근 판을 진단."""
+        from ..analysis.gap import load_reference, personal_gap
+
+        ref = load_reference()
+        if not ref or not user.puuid:
+            return {"ready": False, "reason": "경기 복기 탭에서 내 경기를 먼저 불러와 주세요." if ref else "기준표가 없어요."}
+        async with personal_lock:
+            rows = personal_features(30)
+        if len(rows) < 3:
+            return {"ready": False, "reason": f"정글 판이 {len(rows)}판뿐이에요. 3판 이상 있어야 진단할 수 있어요."}
+        res = personal_gap(rows, ref, "challenger", limit=3)
+        # 변화: 앞쪽 절반 vs 최근 절반
+        if len(rows) >= 8:
+            half = len(rows) // 2
+            old, new = personal_gap(rows[:half], ref, "challenger", 99), personal_gap(rows[half:], ref, "challenger", 99)
+            res["progress_before"], res["progress_now"] = old["progress"], new["progress"]
+            before = {x["key"]: x for x in old["all"]}
+            for x in res["gaps"] + res["strengths"]:
+                b = before.get(x["key"])
+                x["before_text"] = b["mine_text"] if b else None
+        res["groups"] = ref["groups"]
+        res["ready"] = True
+        return res
+
     def _review(match_id: str) -> dict:
         from ..review.analyze import Reviewer
 

@@ -158,6 +158,7 @@ async function loadHome() {
       <p class="muted">${ef.after.games < 5 ? "목표를 정한 뒤 판 수가 적어서 아직은 참고만 하세요." : "판 수가 쌓일수록 믿을 만해져요. 랭크 점수는 디비전 100점·티어 400점 기준이에요."}</p></div>` : "";
   $("home").innerHTML = `
     ${h.rank ? `<div class="rank-line">현재 랭크 <b>${esc(h.rank)}</b></div>` : ""}
+    <div id="gap-panel"></div>
     <div class="home-grid">
       <div>${due}${focusCard}${effect}
         ${todo.length ? `<div class="panel"><h3 class="sec">다음에 할 일</h3><ul class="todo">${todo.map((t) => `<li>${t}</li>`).join("")}</ul></div>` : ""}
@@ -171,7 +172,40 @@ async function loadHome() {
           `<button class="chip-link" onclick="openConcept('${r.id}')">📘 ${esc(r.title)} · ${r.count}판</button>`).join("")}</div>` : ""}
       </div>
     </div>`;
+  CHECKABLE = new Set(h.skills.map((x) => x.id));
+  loadGap();
 }
+
+/* ---------- 챌린저까지의 거리 ---------- */
+const GROUP_KO = { pro: "프로", challenger: "챌린저", apex: "마스터+", platinum: "플래티넘", diamond: "다이아", emerald: "에메랄드" };
+async function loadGap() {
+  const box = $("gap-panel");
+  if (!box) return;
+  let g;
+  try { g = await api("/api/gap"); } catch (e) { box.innerHTML = ""; return; }
+  if (!g.ready) {
+    box.innerHTML = `<div class="panel gap"><h3 class="sec">챌린저까지 가장 큰 차이</h3><p class="muted">${esc(g.reason)}</p></div>`;
+    return;
+  }
+  const bar = (p) => `<div class="gap-bar"><div style="width:${Math.max(0, Math.min(100, p))}%"></div><span class="tick plat">플래티넘</span><span class="tick chal">챌린저</span></div>`;
+  const trend = g.progress_before != null ? ` <span class="muted">(앞쪽 판 ${g.progress_before}점 → 최근 ${g.progress_now}점)</span>` : "";
+  const item = (x, i) => `<div class="gap-item">
+      <div class="gap-rank">${i + 1}</div>
+      <div class="gap-main"><b>${esc(x.label)}</b>
+        <div class="gap-nums">나 <b>${esc(x.mine_text)}</b>${x.before_text ? ` <span class="muted">(전 ${esc(x.before_text)})</span>` : ""} · 플래티넘 ${esc(x.groups_text.platinum || "-")} · 챌린저 <b>${esc(x.groups_text.challenger || "-")}</b> · 프로 ${esc(x.groups_text.pro || "-")}</div>
+        <div class="gap-drill">다음 판: ${esc(x.drill)}</div>
+        ${x.concept === "communication-pings" ? `<div class="muted small-note">핑 횟수 자체가 목표는 아니에요. 핑을 치려면 미니맵을 보고 있어야 해서, 고수일수록 많이 치는 거예요. 의미 없는 핑 연타는 오히려 팀을 흔들어요.</div>` : ""}
+        <div class="row"><button class="ghost small" onclick="openConcept('${x.concept}')">개념 보기</button>
+        ${CHECKABLE.has(x.concept) ? `<button class="ghost small" onclick="setFocus('${x.concept}')">연습 목표로</button>` : ""}</div></div>
+      <div class="gap-power" title="고수와 플래티넘을 가르는 힘 (0.5 = 못 가름, 1 = 완벽히 가름)">가르는 힘 ${Math.round((x.auc - 0.5) * 200)}</div></div>`;
+  box.innerHTML = `<div class="panel gap">
+    <div class="gap-head"><h3 class="sec">챌린저까지 가장 큰 차이 <span class="muted">내 최근 정글 ${g.games}판 · 프로·챌린저·마스터+ ${(g.groups.pro || 0) + (g.groups.challenger || 0) + (g.groups.apex || 0)}판과 플래티넘 ${g.groups.platinum}판을 실제로 비교해 찾은 지표만 써요</span></h3>
+      <div class="gap-score"><div class="big">${g.progress}<small>점</small></div><div class="muted">플래티넘 0 · 챌린저 100${trend}</div>${bar(g.progress)}</div></div>
+    ${g.gaps.length ? g.gaps.map(item).join("") : `<p>검증된 지표에서 챌린저 중앙값과 큰 차이가 없어요. 👍</p>`}
+    ${g.strengths.length ? `<div class="gap-strength">이미 챌린저 수준: ${g.strengths.map((x) => `<span class="strength">✓ ${esc(x.label)} ${esc(x.mine_text)}</span>`).join(" ")}</div>` : ""}
+  </div>`;
+}
+let CHECKABLE = new Set();
 
 async function setFocus(id) {
   await api("/api/focus", { method: "PUT", body: JSON.stringify({ concept: id }) });
@@ -453,6 +487,10 @@ async function openReview(id) {
       ${keyCard}
       <div id="moments-box"><h3 class="sec">그 순간으로 돌아가기</h3><p class="muted">이 판의 판단 지점을 불러오는 중…</p></div>
       ${checks}
+      ${rv.gap && rv.gap.length ? `<h3 class="sec">이번 판 실력 지표 <span class="muted">고수와 플래티넘을 실제로 가르는 지표만 · 기준선 = 고수 4명 중 3명이 넘는 선</span></h3>
+        <table class="metrics gap-table"><tr><th>지표</th><th>이번 판</th><th>기준선</th><th>플래티넘</th><th>챌린저</th></tr>
+        ${rv.gap.map((x) => `<tr onclick="openConcept('${x.concept}')"><td>${esc(x.label)}</td><td class="${x.ok ? "good" : "bad"}">${esc(x.mine_text)} ${x.ok ? "✓" : "✗"}</td>
+          <td>${x.higher_better ? "" : "≤ "}${esc(x.threshold_text)}${x.higher_better ? " 이상" : ""}</td><td>${esc(x.platinum_text)}</td><td>${esc(x.challenger_text)}</td></tr>`).join("")}</table>` : ""}
       ${others ? `<h3 class="sec">그 밖에 고칠 점</h3>${others}` : ""}
       ${strengths ? `<h3 class="sec">잘한 점</h3><div class="strengths">${strengths}</div>` : ""}
       <div id="rv-ai"><button class="ghost" id="rv-ai-btn">🤖 AI 복기 코칭 받기</button></div>

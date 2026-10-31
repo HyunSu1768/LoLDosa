@@ -77,6 +77,7 @@ class Review:
     evidence: list = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     facts: dict = field(default_factory=dict)  # 개념 체크용 구조화 값
+    gap: list = field(default_factory=list)  # 이 판의 '실력 가르는 지표' (챌린저 갭)
     checks: list = field(default_factory=list)  # learn.skills 의 개념 체크 결과
 
     def to_dict(self) -> dict:
@@ -177,7 +178,17 @@ class Reviewer:
             if m:
                 l.t = int(m.group(1)) * 60 + int(m.group(2))
         if rv.is_jungle:
+            from ..analysis.gap import game_gap, jungler_features, load_reference
             from ..learn.skills import evaluate
+
+            raw = self.store.load_raw(match_id)
+            ref = load_reference()
+            gf = jungler_features(raw[0], raw[1], puuid) if raw else None
+            if gf:
+                for k, v in gf.items():
+                    rv.facts.setdefault(k, v)
+                if ref:
+                    rv.gap = game_gap(gf, ref)
             rv.checks = evaluate(rv.facts)
         return rv
 
