@@ -216,6 +216,60 @@ def cmd_app(args) -> int:
     return 0
 
 
+# ---- review ----------------------------------------------------------------
+
+async def _review(args) -> int:
+    from .analysis.query import StatsDB
+    from .review.analyze import Reviewer
+    from .review.sync import PERSONAL_DB, list_matches, resolve_puuid, sync_personal
+    from .riot.client import RiotApiError, RiotClient
+    from .settings import UserSettings
+    from .store.matches import MatchStore
+
+    s = load_settings()
+    if not _key_ok(s):
+        return 1
+    us = UserSettings.load(s.data_dir)
+    riot_id = args.riot_id or us.riot_id
+    if not riot_id:
+        _print("Riot ID 를 입력하세요: loldosa review '닉네임#태그'")
+        return 1
+    store = MatchStore(s.data_dir, filename=PERSONAL_DB)
+    try:
+        async with RiotClient(s.riot_api_key, s.platform, s.region) as riot:
+            puuid = us.puuid if (us.riot_id == riot_id and us.puuid) else await resolve_puuid(riot, riot_id)
+            us.update({"riot_id": riot_id, "puuid": puuid}).save(s.data_dir)
+            _print(f"{riot_id} 최근 솔로랭크 {args.count}경기 가져오는 중…")
+            await sync_personal(riot, store, puuid, args.count, say=_print)
+        games = list_matches(store, puuid, args.count)
+        champs = load_cached(s.data_dir, s.locale)
+        reviewer = Reviewer(store, StatsDB(s.data_dir / "stats.duckdb"), champs)
+        for g in games[: args.show]:
+            rv = reviewer.review(g["match_id"], puuid)
+            sm = rv.summary
+            _print(f"\n■ {sm['date']} {sm['champion']}({sm['position']}) {'승' if sm['win'] else '패'} {sm['kda']} "
+                   f"{sm['duration']} vs 정글 {sm['enemy_jungler']}")
+            for n in rv.notes:
+                _print(f"  · {n}")
+            for l in rv.lessons[:3]:
+                _print(f"  ✗ {l.title}: {l.text}")
+            for l in rv.strengths[:2]:
+                _print(f"  ✓ {l.title}")
+    except (ValueError, RiotApiError) as e:
+        if isinstance(e, RiotApiError) and e.status in (401, 403):
+            _key_help(s, e.status)
+        else:
+            _print(f"[!!] {e}")
+        return 1
+    finally:
+        store.close()
+    return 0
+
+
+def cmd_review(args) -> int:
+    return asyncio.run(_review(args))
+
+
 # ---- ai --------------------------------------------------------------------
 
 def cmd_ai_check(_args) -> int:
@@ -532,6 +586,12 @@ def build_parser() -> argparse.ArgumentParser:
     app.add_argument("--port", type=int, default=8765)
     app.add_argument("--no-ai", action="store_true", help="Claude 코칭 끄기")
     app.set_defaults(func=cmd_app)
+
+    rv = sub.add_parser("review", help="내 최근 경기 리뷰 (닉네임#태그)")
+    rv.add_argument("riot_id", nargs="?", help="예: 'Hide on bush#KR1' (생략 시 저장된 값)")
+    rv.add_argument("--count", type=int, default=10, help="가져올 경기 수")
+    rv.add_argument("--show", type=int, default=3, help="콘솔에 출력할 경기 수")
+    rv.set_defaults(func=cmd_review)
 
     ai = sub.add_parser("ai", help="AI 코치(Claude Code)").add_subparsers(dest="sub", required=True)
     ai.add_parser("check", help="Claude Code 구독 호출 확인").set_defaults(func=cmd_ai_check)

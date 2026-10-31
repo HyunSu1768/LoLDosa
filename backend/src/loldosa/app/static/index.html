@@ -8,48 +8,102 @@
 </head>
 <body>
 <header>
-  <div class="brand">LoL<b>Dosa</b> <span>정글 브리핑</span></div>
-  <div id="stage" class="stage">대기 중</div>
-  <div id="conn" class="conn">연결 중…</div>
+  <div class="brand">LoL<b>Dosa</b></div>
+  <nav>
+    <button class="tab active" data-tab="brief">브리핑</button>
+    <button class="tab" data-tab="review">경기 리뷰</button>
+    <button class="tab" data-tab="settings">설정</button>
+  </nav>
+  <div class="pills">
+    <label class="toggle" title="모든 문장 옆에 수치·표본 수·출처를 표시합니다"><input type="checkbox" id="show-ev"> 근거 보기</label>
+    <span id="pill-lcu" class="pill">클라이언트</span>
+    <span id="pill-ai" class="pill">AI</span>
+    <span id="pill-ws" class="pill">연결 중</span>
+  </div>
 </header>
 
-<main>
-  <aside id="teams">
-    <section><h3>아군</h3><ul id="allies"></ul><div class="bans" id="ally-bans"></div></section>
-    <section><h3>적군</h3><ul id="enemies"></ul><div class="bans" id="enemy-bans"></div></section>
-    <p id="scope" class="scope"></p>
-  </aside>
+<!-- ============================ 브리핑 ============================ -->
+<section id="tab-brief" class="tabpane active">
+  <div id="brief-idle" class="empty">
+    <div class="empty-icon">⏳</div>
+    <h2>챔피언 선택을 기다리는 중</h2>
+    <p>롤에서 랭크 게임 챔피언 선택에 들어가면 자동으로 브리핑이 뜹니다.</p>
+    <p id="status-line" class="muted"></p>
+  </div>
 
-  <section id="content">
-    <div id="idle" class="idle">
-      <h2>챔피언 선택을 기다리는 중</h2>
-      <p>롤 클라이언트에서 랭크 게임 챔피언 선택에 들어가면 자동으로 브리핑이 시작됩니다.</p>
-      <p id="status-line" class="muted"></p>
+  <div id="brief" class="brief hidden">
+    <aside class="teams">
+      <div class="team-head">아군 <span id="side-badge" class="side"></span></div>
+      <ul id="allies"></ul>
+      <div class="bans" id="ally-bans"></div>
+      <div class="team-head">적군</div>
+      <ul id="enemies"></ul>
+      <div class="bans" id="enemy-bans"></div>
+      <p id="scope" class="scope"></p>
+    </aside>
+
+    <div class="brief-main">
+      <div id="ended-banner" class="banner hidden">챔피언 선택이 끝났어요 — 로딩 화면에서도 이 브리핑을 계속 볼 수 있어요.</div>
+      <div class="stage-line"><span id="stage"></span><span id="matchup-title"></span></div>
+      <div id="notes"></div>
+
+      <div id="picks-box" class="panel hidden">
+        <div class="panel-head"><h3>추천 픽</h3><span class="muted" id="pool-hint"></span></div>
+        <div id="picks" class="pick-row"></div>
+        <div id="picks-outside-wrap" class="hidden"><div class="sub-head">챔프폭 밖이지만 참고할 만한 픽</div><div id="picks-outside" class="pick-row small"></div></div>
+        <div id="bans-wrap" class="hidden"><div class="sub-head">추천 밴</div><div id="bans" class="pick-row small"></div></div>
+      </div>
+
+      <div id="plan-box" class="plan hidden">
+        <div class="plan-head"><h2>이번 판 플랜</h2><span class="muted">고티어 경기 데이터 기준 · 근거가 있는 것만</span></div>
+        <ol id="plan"></ol>
+      </div>
+
+      <div id="ai" class="ai hidden">
+        <div class="ai-head"><span class="badge">AI 코치</span><span id="ai-headline"></span></div>
+        <ol id="ai-points"></ol>
+        <p id="ai-status" class="muted"></p>
+      </div>
+
+      <div class="cards-head"><h3>자세히 보기</h3><button id="expand-all" class="link">모두 펼치기</button></div>
+      <div id="cards" class="cards"></div>
     </div>
+  </div>
+</section>
 
-    <div id="notes"></div>
-
-    <div id="recs" class="recs hidden">
-      <div class="rec-col"><h3>추천 픽</h3><ol id="picks"></ol></div>
-      <div class="rec-col"><h3>추천 밴</h3><ol id="bans"></ol></div>
+<!-- ============================ 경기 리뷰 ============================ -->
+<section id="tab-review" class="tabpane">
+  <div class="review-bar">
+    <input id="riot-id" placeholder="닉네임#태그 (예: Hide on bush#KR1)">
+    <select id="review-count"><option value="5">최근 5판</option><option value="10" selected>최근 10판</option><option value="20">최근 20판</option></select>
+    <button id="review-sync" class="primary">경기 불러오기</button>
+    <span id="review-status" class="muted"></span>
+  </div>
+  <div class="review">
+    <ul id="match-list" class="match-list"></ul>
+    <div id="review-detail" class="review-detail">
+      <div class="empty small"><p>왼쪽에서 경기를 고르면 리뷰가 나와요.</p></div>
     </div>
+  </div>
+</section>
 
-    <div id="ai" class="ai hidden">
-      <div class="ai-head"><span class="badge">AI 코치</span><span id="ai-headline"></span></div>
-      <ol id="ai-points"></ol>
-      <p id="ai-status" class="muted"></p>
+<!-- ============================ 설정 ============================ -->
+<section id="tab-settings" class="tabpane">
+  <div class="settings">
+    <div class="field"><label>내 Riot ID</label><input id="set-riot-id" placeholder="닉네임#태그"><p class="muted">경기 리뷰에 사용합니다.</p></div>
+    <div class="field"><label>비교 기준 티어 (갱 판단 등)</label>
+      <select id="set-bucket"><option value="platinum">플래티넘 (내 티어대)</option><option value="apex">마스터 이상</option></select>
+      <p class="muted">상대 반응이 중요한 항목(갱 대상)은 이 티어 데이터를 우선 씁니다. 표본이 부족하면 마스터+ 데이터를 씁니다.</p></div>
+    <div class="field"><label><input type="checkbox" id="set-ai"> AI 코치 사용 (Claude 구독)</label></div>
+    <div class="field">
+      <label>내 정글 챔프폭 <span id="pool-count" class="muted"></span></label>
+      <p class="muted">고르면 추천 픽이 이 안에서 나오고, 폭 밖에서 확실히 나은 챔피언만 '참고'로 따로 보여줘요.</p>
+      <input id="champ-search" placeholder="챔피언 검색">
+      <div id="champ-grid" class="champ-grid"></div>
     </div>
-
-    <div id="cards" class="cards"></div>
-  </section>
-</main>
-
-<template id="tpl-card">
-  <article class="card">
-    <button class="card-head"><span class="card-title"></span><span class="card-headline"></span><span class="chev">▾</span></button>
-    <ul class="card-items"></ul>
-  </article>
-</template>
+    <button id="save-settings" class="primary">저장</button> <span id="settings-status" class="muted"></span>
+  </div>
+</section>
 
 <script src="/static/app.js"></script>
 </body>

@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import asdict
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -21,6 +22,9 @@ from ..briefing.engine import BriefingEngine
 from ..config import load_settings
 from ..ddragon import ChampionIndex, load_cached
 from ..lcu.champselect import ChampSelectState, Stage
+from ..review.sync import PERSONAL_DB
+from ..settings import UserSettings
+from ..store.matches import MatchStore
 
 log = logging.getLogger(__name__)
 STATIC = Path(__file__).parent / "static"
@@ -68,8 +72,24 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
     settings = load_settings()
     champs = load_cached(settings.data_dir, settings.locale) or ChampionIndex("", {})
     stats = StatsDB(settings.data_dir / "stats.duckdb")
-    engine = BriefingEngine(stats, champs, settings.data_dir / "guides.duckdb")
+    user = UserSettings.load(settings.data_dir)
+    engine = BriefingEngine(stats, champs, settings.data_dir / "guides.duckdb", user)
     hub = Hub()
+    personal_lock = asyncio.Lock()
+
+    @contextmanager
+    def personal_store():
+        """개인 경기 DB 는 요청마다 열고 닫는다 (터미널의 `loldosa review` 와 동시에 써도 되도록)."""
+        import duckdb
+
+        try:
+            store = MatchStore(settings.data_dir, filename=PERSONAL_DB)
+        except duckdb.IOException:
+            raise HTTPException(409, "다른 프로그램(터미널의 loldosa review 등)이 경기 DB 를 쓰는 중입니다. 잠시 후 다시 시도하세요.")
+        try:
+            yield store
+        finally:
+            store.close()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -94,14 +114,16 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
     async def on_state(state: ChampSelectState | None) -> None:
         nonlocal ai_task
         if state is None:
-            await hub.send({"type": "idle"})
+            # 챔선이 끝나도 마지막 브리핑은 남겨둔다 (로딩 화면에서 읽을 수 있게)
+            await hub.send({"type": "ended"})
             return
+        hub.last.pop("ended", None)
         briefing = await asyncio.to_thread(engine.build, state)
         b = briefing.to_dict()
         await hub.send({"type": "briefing", "state": state_view(state, champs), "briefing": b,
                         "ddragon": champs.version})
         # AI 는 비용·시간이 들어서 의미 있는 시점에만: 내 픽 확정 직후, 전원 확정
-        if coach and state.stage in (Stage.POST_MY_PICK, Stage.FINAL) and b["cards"]:
+        if coach and user.ai_enabled and state.stage in (Stage.POST_MY_PICK, Stage.FINAL) and b["cards"]:
             key = (state.stage.value, b["my_champion"], b["enemy_jungler"],
                    tuple(sorted(x.champion_id for x in state.enemies if x.locked)))
             if hub.last.get("ai", {}).get("key") != str(key):
@@ -110,6 +132,15 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
                 ai_task = asyncio.create_task(run_ai(b, key))
 
     async def watcher() -> None:
+        try:
+            await _watch()
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # 감시가 조용히 죽지 않도록
+            log.exception("챔선 감시 중 오류")
+            await hub.send({"type": "error", "message": "챔피언 선택 감시 중 오류가 났습니다. 터미널 로그를 확인하세요."})
+
+    async def _watch() -> None:
         if replay:
             from ..lcu.replay import replay as replay_source
             # 데모: 한 번 재생하고 마지막(확정) 화면에서 멈춘다
@@ -137,8 +168,96 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
             "replay": str(replay) if replay else None,
             "stats": meta,
             "ddragon": champs.version,
-            "ai": coach.describe() if coach else {"enabled": False},
+            "ai": ({**coach.describe(), "enabled": coach.enabled and user.ai_enabled} if coach
+                   else {"enabled": False}),
+            "settings": {"riot_id": user.riot_id, "pool": len(user.champion_pool)},
         }
+
+    # ---- 설정 ---------------------------------------------------------------
+
+    @app.get("/api/settings")
+    async def get_settings():
+        return asdict(user)
+
+    @app.put("/api/settings")
+    async def put_settings(patch: dict = Body(...)):
+        if "riot_id" in patch and patch["riot_id"] != user.riot_id:
+            patch["puuid"] = ""
+        user.update(patch).save(settings.data_dir)
+        return asdict(user)
+
+    @app.get("/api/champions")
+    async def champions():
+        jungle = {}
+        if stats.available:
+            with stats.session():
+                s = stats.pick_scope("apex")
+                jungle = {r["champion_id"]: r["games"] for r in stats.jungle_pool(s, min_games=1)}
+        out = [{"id": c.id, "name": c.name, "key": c.key, "jungle_games": jungle.get(c.id, 0)} for c in champs.all()]
+        return sorted(out, key=lambda c: (-c["jungle_games"], c["name"]))
+
+    # ---- 경기 리뷰 -----------------------------------------------------------
+
+    def review_ready():
+        if not settings.riot_api_key:
+            raise HTTPException(400, "RIOT_API_KEY 가 없습니다 (.env)")
+
+    @app.post("/api/review/sync")
+    async def review_sync(body: dict = Body(default={})):
+        from ..review.sync import list_matches, resolve_puuid, sync_personal
+        from ..riot.client import RiotApiError, RiotClient
+
+        review_ready()
+        riot_id = (body.get("riot_id") or user.riot_id).strip()
+        if not riot_id:
+            raise HTTPException(400, "Riot ID 를 입력하세요 (닉네임#태그)")
+        try:
+            async with personal_lock:
+                async with RiotClient(settings.riot_api_key, settings.platform, settings.region) as riot:
+                    puuid = user.puuid if (user.riot_id == riot_id and user.puuid) else await resolve_puuid(riot, riot_id)
+                    user.update({"riot_id": riot_id, "puuid": puuid}).save(settings.data_dir)
+                    with personal_store() as st:
+                        await sync_personal(riot, st, puuid, int(body.get("count", 10)), say=lambda *_: None)
+                        return list_matches(st, puuid, 30)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        except RiotApiError as e:
+            raise HTTPException(502, "Riot 이 키를 거부했습니다 (.env 의 RIOT_API_KEY 확인)" if e.status in (401, 403)
+                                else str(e))
+
+    @app.get("/api/review/matches")
+    async def review_matches():
+        from ..review.sync import list_matches
+
+        if not user.puuid:
+            return []
+        async with personal_lock:
+            with personal_store() as st:
+                return list_matches(st, user.puuid, 30)
+
+    def _review(match_id: str) -> dict:
+        from ..review.analyze import Reviewer
+
+        with personal_store() as st:
+            return Reviewer(st, stats, champs).review(match_id, user.puuid).to_dict()
+
+    @app.get("/api/review/{match_id}")
+    async def review_match(match_id: str):
+        if not user.puuid:
+            raise HTTPException(400, "먼저 Riot ID 로 경기를 불러오세요")
+        try:
+            async with personal_lock:
+                return await asyncio.to_thread(_review, match_id)
+        except KeyError as e:
+            raise HTTPException(404, str(e))
+
+    @app.post("/api/review/{match_id}/ai")
+    async def review_ai(match_id: str):
+        if not coach:
+            return {"status": "disabled", "message": "AI 코치가 꺼져 있습니다"}
+        async with personal_lock:
+            rv = await asyncio.to_thread(_review, match_id)
+        return await coach.coach_review(rv)
 
     @app.websocket("/ws")
     async def ws(sock: WebSocket):

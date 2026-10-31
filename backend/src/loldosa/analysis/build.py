@@ -84,7 +84,8 @@ WITH dist AS (
            max(gold_diff) FILTER (WHERE minute = 5) AS gd5,
            max(gold_diff) FILTER (WHERE minute = 10) AS gd10,
            max(gold_diff) FILTER (WHERE minute = 15) AS gd15,
-           max(xp_diff) FILTER (WHERE minute = 10) AS xpd10
+           max(xp_diff) FILTER (WHERE minute = 10) AS xpd10,
+           max(jungle_cs) FILTER (WHERE minute = 10) AS jungle_cs10
     FROM gfr GROUP BY ALL
 ), kills AS (
     SELECT g.match_id, g.pid, e.ts_ms, region(e.x, e.y) AS reg,
@@ -105,6 +106,7 @@ WITH dist AS (
     FROM kills GROUP BY ALL
 )
 SELECT g.*, s.start_camp, s.start_side, a.route3, a.side3, a.camps3, a.clear3, t.gd5, t.gd10, t.gd15, t.xpd10,
+       t.jungle_cs10,
        fg.first_gank_ms, fg.first_gank_lane, fg.first_gank_outcome,
        coalesce(ea.takedowns10, 0) AS takedowns10, coalesce(ea.deaths10, 0) AS deaths10,
        coalesce(ea.jungle_fights5, 0) AS jungle_fights5, a4.side4
@@ -161,7 +163,9 @@ SELECT sc.scope, sc.bucket, x.champ AS champion_id,
     avg(kills) AS kills, avg(deaths) AS deaths, avg(assists) AS assists, avg(kp) AS kp,
     avg(gd10) AS gd10, avg(gd15) AS gd15, avg(xpd10) AS xpd10,
     avg(takedowns10) AS takedowns10, avg(deaths10) AS deaths10,
-    avg(enemy_jungle_minions) AS enemy_jungle_cs, avg(vision_score) AS vision,
+    avg(enemy_jungle_minions) AS enemy_jungle_cs, avg(vision_score) AS vision, avg(control_wards) AS control_wards,
+    avg(jungle_cs10) AS jungle_cs10, avg(camps3) AS camps3, avg(deaths) AS deaths_game,
+    avg(vision_score / (duration_s / 60.0)) AS vision_pm,
     avg(own_first_dragon) AS first_dragon_rate, avg(own_first_grub) AS first_grub_rate,
     avg(own_grubs) AS grubs, avg(own_herald) AS herald_rate,
     avg(first_gank_ms) / 1000 AS first_gank_s,
@@ -308,6 +312,22 @@ WITH lane AS (
 SELECT sc.scope, sc.bucket, l.position, l.champion_id, count(*) AS games,
     avg(coalesce(ev.died_to_jg, 0)) AS died_to_jg, avg(coalesce(ev.kill_with_jg, 0)) AS kill_with_jg
 FROM lane l LEFT JOIN ev USING (match_id, pid) JOIN sc ON sc.match_id = l.match_id GROUP BY ALL""",
+
+    "jungle_duels": """
+-- 정글러끼리의 킬 교환(한쪽 정글러가 죽고 다른 쪽 정글러가 킬/어시스트), 15분 전, 내 레벨 구간별
+WITH d AS (
+    SELECT x.match_id, x.champ, x.echamp, e.ts_ms,
+        CASE WHEN e.victim_id = x.epid THEN 1 ELSE 0 END AS won,
+        f.level
+    FROM g x JOIN src.events e ON e.match_id = x.match_id AND e.type = 'CHAMPION_KILL' AND e.ts_ms < 900000
+    JOIN src.frames f ON f.match_id = x.match_id AND f.participant_id = x.pid AND f.minute = e.ts_ms // 60000
+    WHERE (e.victim_id = x.epid AND (e.participant_id = x.pid OR list_contains(e.assists, x.pid)))
+       OR (e.victim_id = x.pid AND (e.participant_id = x.epid OR list_contains(e.assists, x.epid)))
+)
+SELECT sc.scope, sc.bucket, d.champ AS champion_id, d.echamp AS enemy_id,
+    CASE WHEN d.level <= 3 THEN '1-3' WHEN d.level <= 5 THEN '4-5' ELSE '6+' END AS level_band,
+    count(*) AS fights, sum(won) AS won
+FROM d JOIN sc USING (match_id) GROUP BY ALL""",
 
     "side_transition": """
 SELECT sc.scope, sc.bucket, x.clear3, x.start_side, x.side3, x.side4, count(*) AS games

@@ -117,11 +117,11 @@ def _bulk_insert(con: duckdb.DuckDBPyConnection, table: str, rows: list[tuple]) 
 
 
 class MatchStore:
-    def __init__(self, data_dir: Path, read_only: bool = False) -> None:
+    def __init__(self, data_dir: Path, read_only: bool = False, filename: str = "matches.duckdb") -> None:
         self.data_dir = data_dir
         self.raw_dir = data_dir / "raw"
         data_dir.mkdir(parents=True, exist_ok=True)
-        self.path = data_dir / "matches.duckdb"
+        self.path = data_dir / filename
         self.con = duckdb.connect(str(self.path), read_only=read_only)
         if not read_only:
             self._x(SCHEMA)
@@ -245,6 +245,9 @@ class MatchStore:
             if progress and i % 100 == 0:
                 progress(i, len(files))
         return n
+
+    def has_match(self, match_id: str) -> bool:
+        return bool(self._x("SELECT 1 FROM matches WHERE match_id = ?", [match_id]))
 
     def counts(self) -> dict[str, int]:
         out = {t: self._x(f"SELECT count(*) FROM {t}")[0][0]

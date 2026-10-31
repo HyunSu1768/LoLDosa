@@ -19,3 +19,15 @@ def test_ws_streams_briefing(monkeypatch, tmp_path):
             while msg["type"] != "briefing":
                 msg = ws.receive_json()
             assert msg["state"]["allies"] and "briefing" in msg
+
+
+def test_settings_and_review_endpoints(monkeypatch, tmp_path):
+    monkeypatch.setenv("LOLDOSA_DATA_DIR", str(tmp_path))
+    app = create_app(replay=SAMPLE, replay_interval=0.01, ai=False)
+    with TestClient(app) as client:
+        r = client.put("/api/settings", json={"riot_id": "test#KR1", "champion_pool": [64]})
+        assert r.json()["champion_pool"] == [64]
+        assert client.get("/api/settings").json()["riot_id"] == "test#KR1"
+        assert client.get("/api/review/matches").json() == []
+        assert client.get("/api/review/KR_1").status_code == 400
+        assert isinstance(client.get("/api/champions").json(), list)

@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import math
+import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -53,20 +54,28 @@ class StatsDB:
 
     def __init__(self, path: Path) -> None:
         self.path = path
-        self._con: duckdb.DuckDBPyConnection | None = None
+        # 서버에서는 브리핑(작업 스레드)과 상태 조회(이벤트 루프)가 동시에 쓰므로 연결은 스레드별로 둔다
+        self._local = threading.local()
 
     @property
     def available(self) -> bool:
         return self.path.exists()
 
+    @property
+    def _con(self) -> duckdb.DuckDBPyConnection | None:
+        return getattr(self._local, "con", None)
+
     @contextmanager
     def session(self):
-        self._con = duckdb.connect(str(self.path), read_only=True)
+        if self._con is not None:  # 같은 스레드 안의 중첩 호출은 기존 연결 재사용
+            yield self
+            return
+        self._local.con = duckdb.connect(str(self.path), read_only=True)
         try:
             yield self
         finally:
-            self._con.close()
-            self._con = None
+            self._local.con.close()
+            self._local.con = None
 
     def rows(self, sql: str, params: list | None = None) -> list[dict]:
         assert self._con is not None, "use `with stats.session():`"
@@ -281,3 +290,20 @@ class StatsDB:
         if not self._has("pro_matchups"):
             return None
         return self.one("SELECT * FROM pro_matchups WHERE champion_id=? AND enemy_id=?", [champ, enemy])
+
+    # ---- 정글 교전 (레벨 구간) -------------------------------------------------
+
+    def duels(self, s: Scope, champ: int, enemy: int | None = None) -> dict[str, dict]:
+        w, p = self._w(s)
+        q = f"SELECT level_band, sum(fights) AS fights, sum(won) AS won FROM jungle_duels WHERE {w} AND champion_id=?"
+        params = p + [champ]
+        if enemy:
+            q += " AND enemy_id=?"
+            params.append(enemy)
+        if not self._has("jungle_duels"):
+            return {}
+        return {r["level_band"]: r for r in self.rows(q + " GROUP BY level_band", params)}
+
+    def has_rows(self, table: str, s: Scope) -> bool:
+        w, p = self._w(s)
+        return bool(self.rows(f"SELECT 1 FROM {table} WHERE {w} LIMIT 1", p))

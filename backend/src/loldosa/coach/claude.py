@@ -19,11 +19,37 @@ SYSTEM = """너는 리그 오브 레전드 정글 코치다. 사용자는 지금
 1. 주어진 EVIDENCE 목록에 있는 사실만 사용한다. 너의 사전 지식(챔피언 스킬, 메타, 일반론)으로 사실을 만들지 않는다.
 2. 모든 포인트에 근거 ID 를 1개 이상 단다. 근거로 뒷받침되지 않는 내용은 쓰지 않는다.
 3. 표본이 적은(신뢰도 낮음) 근거는 단정하지 말고 '표본 적음'을 밝힌다.
-4. 실행 가능한 행동으로 쓴다: 언제(시간대), 어디서, 무엇을. 한국어, 존댓말, 짧게.
+4. 실행 가능한 행동으로 쓴다: 언제(시간대), 어디서, 무엇을. 한국어, 존댓말.
+   각 포인트는 한 문장, 80자 이내. 숫자는 꼭 필요한 것 하나만. 플래티넘 플레이어가 로딩 화면에서 10초 안에 읽을 수 있게.
 5. 근거 문장에 없는 인과관계를 만들지 않는다. 예: 3:00 위치만 보고 몇 캠프를 돌았는지 추측하지 말고, 클리어 방식은 '완료 캠프 수' 근거로만 말한다.
 6. 출력은 JSON 하나만. 다른 텍스트 금지.
 형식: {"headline": "이번 판 한 줄 운영 방향", "points": [{"phase": "0-3분|3-8분|8-15분|15분+|전체", "text": "...", "evidence": ["E1"]}]}
-points 는 3~6개, 시간 순서로."""
+points 는 3~4개, 시간 순서로."""
+
+
+REVIEW_SYSTEM = """너는 리그 오브 레전드 정글 코치다. 사용자가 끝난 경기를 복기하고 있다.
+반드시 지킬 규칙:
+1. 주어진 EVIDENCE 목록에 있는 사실만 사용한다. 너의 사전 지식으로 사실을 만들지 않는다.
+2. 모든 포인트에 근거 ID 를 1개 이상 단다.
+3. 표본이 적은(신뢰도 낮음) 근거는 단정하지 않는다.
+4. 비난하지 말고, 다음 판에 바로 할 수 있는 행동으로 쓴다. 한국어, 존댓말, 각 포인트 2문장 이내.
+5. 근거 문장에 없는 인과관계를 만들지 않는다.
+6. 출력은 JSON 하나만.
+형식: {"headline": "이 경기 한 줄 총평", "points": [{"phase": "잘한 점|고칠 점|다음 판", "text": "...", "evidence": ["E1"]}]}
+points 는 3~5개: 잘한 점 1개, 고칠 점 1~3개, 다음 판 1개."""
+
+
+def build_review_prompt(review: dict) -> str:
+    payload = {
+        "summary": review.get("summary"),
+        "lessons": [{k: l[k] for k in ("title", "text", "evidence")} for l in review.get("lessons", [])],
+        "strengths": [{k: l[k] for k in ("title", "text", "evidence")} for l in review.get("strengths", [])],
+        "metrics": review.get("metrics"),
+        "EVIDENCE": [{"id": e["id"], "text": e.get("text", ""), "n": e.get("games"),
+                      "confidence": e.get("confidence"), "source": e.get("source", "")}
+                     for e in review.get("evidence", [])],
+    }
+    return "아래 경기 리뷰 데이터만 근거로 복기 코칭을 해줘.\n" + json.dumps(payload, ensure_ascii=False, default=str)
 
 
 def build_prompt(briefing: dict) -> str:
@@ -130,6 +156,18 @@ class ClaudeCoach:
         if envelope is None or envelope.get("is_error") or proc.returncode != 0:
             raise CoachError(explain_failure(envelope, err.decode("utf-8", "replace")))
         return envelope.get("result", "")
+
+    async def coach_review(self, review: dict) -> dict:
+        if not self.enabled:
+            return {"status": "disabled", "message": "Claude Code CLI 가 없습니다 (설치 후 `claude` 로그인)."}
+        valid = {e["id"] for e in review.get("evidence", [])}
+        try:
+            text = await self.run_cli(build_review_prompt(review), system=REVIEW_SYSTEM)
+            return {"status": "ok", **parse_and_validate(text, valid)}
+        except asyncio.TimeoutError:
+            return {"status": "error", "message": f"Claude 응답 시간 초과({self.timeout:.0f}초)"}
+        except Exception as e:  # noqa: BLE001
+            return {"status": "error", "message": str(e)}
 
     async def coach(self, briefing: dict) -> dict:
         if not self.enabled:

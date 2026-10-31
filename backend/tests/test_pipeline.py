@@ -167,3 +167,27 @@ def test_reprocess_from_raw(tmp_path):
     assert store.reprocess() == 1
     assert store._x("SELECT count(*) FROM participants WHERE magic_dmg IS NULL")[0][0] == 0
     store.close()
+
+
+def test_stats_sessions_are_thread_safe(built):
+    import threading
+
+    d, _, _ = built
+    stats = StatsDB(d / "stats.duckdb")
+    errors = []
+
+    def worker():
+        try:
+            for _ in range(30):
+                with stats.session():
+                    stats.meta()
+                    stats.jungle_pool(Scope("ALL", "apex"), min_games=1)
+        except Exception as e:  # noqa: BLE001
+            errors.append(e)
+
+    threads = [threading.Thread(target=worker) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert not errors

@@ -39,7 +39,15 @@ class Recommendation:
     name: str
     score: float  # 예상 승률 (0~1)
     key: str = ""  # Data Dragon 영문 키 (아이콘)
+    in_pool: bool = False  # 내 챔프폭
     reasons: list[Item] = field(default_factory=list)
+
+
+@dataclass
+class PlanLine:
+    title: str  # 시작 / 첫 갱 / 주의 / 오브젝트 / 운영
+    text: str  # 쉬운 말 한두 문장
+    evidence: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -51,7 +59,9 @@ class Briefing:
     enemy_jungler_name: str = ""
     scope_label: str = ""
     notes: list[str] = field(default_factory=list)
+    plan: list[PlanLine] = field(default_factory=list)
     picks: list[Recommendation] = field(default_factory=list)
+    picks_outside: list[Recommendation] = field(default_factory=list)  # 챔프폭 밖 참고
     bans: list[Recommendation] = field(default_factory=list)
     cards: list[Card] = field(default_factory=list)
     evidence: list[Evidence] = field(default_factory=list)
