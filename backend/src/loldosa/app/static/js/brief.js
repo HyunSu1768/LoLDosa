@@ -106,6 +106,7 @@ function draw() {
 
   $("#more", viewEl).onclick = () => detailSheet(b, pool, my);
   $$("[data-ph]", viewEl).forEach((r) => (r.onclick = () => phaseSheet(b.game_plan, +r.dataset.ph, pool)));
+  $$("[data-fi]", viewEl).forEach((r) => (r.onclick = () => fightSheet(b.game_plan, pool)));
   $("#ai", viewEl)?.addEventListener("click", () => aiSheet(ai, pool));
 }
 
@@ -115,7 +116,17 @@ function gamePlan(gp, pool) {
   return `<h2 class="section">전체 운영<small>우리 ${esc(gp.us.label)}${gp.them ? ` · 상대 ${esc(gp.them.label)}` : ""}</small></h2>
     <div class="list">${gp.phases.map((p, i) => row({ lead: `<span class="tag num">${esc(p.time)}</span>`, title: linkify(p.headline),
       sub: p.why ? `<span class="why-short">왜? ${esc(p.why)}</span>` : esc(p.title), attrs: `data-ph="${i}"` })).join("")}</div>
-    ${gp.vs ? `<p class="sub" style="margin-top:8px">${linkify(gp.vs)}</p>` : ""}`;
+    ${gp.vs ? `<p class="sub" style="margin-top:8px">${linkify(gp.vs)}</p>` : ""}
+    ${gp.fight && gp.fight.length ? `<h2 class="section">한타 이렇게 해요<small>이 판 10명 기준</small></h2>
+      <div class="list">${gp.fight.map((x, i) => row({ lead: `<span class="tag">${i === 0 ? "내 역할" : "한타"}</span>`, title: linkify(x.text),
+        sub: `<span class="why-short">왜? ${esc(x.why)}</span>`, attrs: `data-fi="${i}"` })).join("")}</div>` : ""}`;
+}
+function fightSheet(gp, pool) {
+  openSheet(`<div class="eyebrow">이 판 10명 기준</div><h2>한타 이렇게 해요</h2>
+    <div class="todo">${gp.fight.map((x) => `<div class="todo-item"><div class="todo-do">${linkify(x.text)}</div>
+      <div class="todo-why"><b>왜?</b> ${linkify(x.why)}${evChips(x.evidence, pool)}</div></div>`).join("")}</div>
+    <p class="sub" style="margin-top:12px">'첫 킬 팀이 73.7% 이겨요' 같은 숫자는 KR 솔랭 4,616판의 한타 35,480개에서 직접 센 값이에요. 원래 강한 팀이 첫 킬도 내는 효과가 섞여 있어요.</p>
+    <div class="btn-row end"><button class="btn fill m" data-close>닫기</button></div>`);
 }
 function phaseSheet(gp, i, pool) {
   const p = gp.phases[i];

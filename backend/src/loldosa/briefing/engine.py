@@ -722,8 +722,17 @@ class BriefingEngine:
         tr = traits()
         trait = self.ev.add(f"챔피언 성향(묶기·포킹·같이 끊기·회복/보호막·혼자 민 포탑)을 실제 경기 {tr.get('games', 0):,}판에서 챔피언끼리 비교한 백분위. "
                             "유형별 운영 방법은 코칭 자료 정리라서 판단으로 표시", "KR 솔랭 경기 기록 + 코칭 자료", tr.get("games"))
-        return build_game_plan(allies, enemies, {a.champion_id: a.position for a in state.allies}, self.facts,
-                               self.name, timing, trait, self._plan_ctx(state, tr))
+        gp = build_game_plan(allies, enemies, {a.champion_id: a.position for a in state.allies}, self.facts,
+                             self.name, timing, trait, self._plan_ctx(state, tr))
+        me = state.me.champion_id if state.me else 0
+        if gp is not None and me:
+            from .gameplan import build_fight_plan
+
+            fight = self.ev.add("KR 솔랭 4,616판 타임라인의 한타(20초 안 3킬 이상) 35,480개: 첫 킬을 낸 팀이 그 한타를 73.7% 이겼고, "
+                                "근처 한타를 이긴 팀이 드래곤을 78.4%, 바론을 87.5% 가져갔어요 (상관관계)", "KR 솔랭 타임라인", 35480)
+            gp["fight"] = build_fight_plan(me, allies, enemies, self.name,
+                                           lambda c: (self.champs.get(c).tags if self.champs.get(c) else ()), fight, trait)
+        return gp
 
     def _plan_ctx(self, state: ChampSelectState, tr: dict) -> dict:
         """이 판에만 해당하는 사실: 라인 매치업 10분 골드 차, 상대 정글 습관, 후반에 강한 챔피언 (전 티어 전체 기간으로 표본 최대)."""

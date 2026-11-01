@@ -23,8 +23,8 @@
 - 탱커 정글은 팀을 받쳐주는 역할이며, 싸고 효율 좋은 체력·방어 아이템과 적은 골드로 굴러가는 빌드를 산다 — [Hotspawn: How To Play Jungler](https://www.hotspawn.com/league-of-legends/guide/how-to-play-jungler-in-league-of-legends)
 
 **다이버/브루저 정글 (리 신/신 짜오/바이/자르반/오공/헤카림)**
-- 신 짜오: 돌진(E)이 진입기이자 주 이니시. W/R 계열 보호막(Crescent Guard)은 4초 동안 나머지 적의 피해를 막아 대상 하나를 고립시킨다. 리 신은 와드 점프로 빠질 수 있지만 신 짜오는 E로 들어가면 빠져나올 수단이 없다 — [dodge.gg Xin Zhao Build (2026)](https://www.dodge.gg/en-US/lol/news/xin-zhao-build-2026)
-- 리 신은 후반으로 갈수록 긴 한타보다 끊기·이니시·필링을 맡는다. 기동성이 높고 포탑 어그로를 풀 수 있어 다이브도 잘한다 — [tacter Lee Sin jungle guide](https://www.tacter.com/lol/guides/lee-sin-jungle-build-guide-b9979949)(검색 요약)
+- 신 짜오: 돌진(E)이 진입기이자 주 이니시. 궁극기 R(Crescent Guard)은 4초 동안 나머지 적의 피해를 막아 대상 하나를 고립시킨다. 리 신은 와드 점프로 빠질 수 있지만 신 짜오는 E로 들어가면 빠져나올 수단이 없다 — [dodge.gg Xin Zhao Build (2026)](https://www.dodge.gg/en-US/lol/news/xin-zhao-build-2026)
+- 리 신은 후반으로 갈수록 긴 한타보다 끊기·이니시·필링을 맡는다. 기동성이 높고 포탑 어그로를 풀 수 있어 다이브도 잘한다 — [tacter Lee Sin jungle guide](https://www.tacter.com/lol/guides/lee-sin-jungle-build-guide-b9979949), [dodge.gg Xin Zhao 2026](https://www.dodge.gg/en-US/lol/news/xin-zhao-build-2026) (검색 요약. 두 문장 중 어느 쪽이 어느 출처인지는 확인 못 함)
 - 한국 공략: 오공은 시야 밖에서 다가가 한타를 부수는 브루저 정글, 다이애나는 표식 후 순식간에 거리를 좁혀 한타를 부순다 — [lolstats.gg 오공](https://lolstats.gg/ko/champions/wukong/against), [lolstats.gg 다이애나](https://lolstats.gg/ko/champions/diana/against)
 - 인벤 글에서 브루저는 상대가 누구든 교전을 벌이는 전투형 챔피언이다. 잘 크면 강하지만 성장이 막히면 팀에 부담이 된다 — [인벤 게시글](https://www.inven.co.kr/board/3369/2525422)(검색 요약)
 - 바이, 자르반, 헤카림의 한타 타이밍을 직접 다룬 2026 자료는 찾지 못했다(아래 Gaps 참고).

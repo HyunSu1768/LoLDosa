@@ -46,3 +46,16 @@ def test_ai_prompt_gets_game_plan_and_drops_outdated_rules():
     out = parse_and_validate('{"headline":"h","points":[{"phase":"20분~","text":"아타칸을 먼저 쳐요","evidence":["E1"]},'
                              '{"phase":"~5분","text":"풀캠 후 바위게","evidence":["E1"]}]}', {"E1"})
     assert [p["text"] for p in out["points"]] == ["풀캠 후 바위게"] and out["dropped"] == 1
+
+
+def test_fight_plan_roles_targets_and_why():
+    from loldosa.briefing.gameplan import build_fight_plan
+
+    tags = {64: ("Fighter", "Assassin"), 121: ("Assassin",), 67: ("Marksman", "Assassin"), 154: ("Tank", "Fighter")}.get
+    # 내가 자크(탱커) / 상대에 카직스(암살자)·베인(원딜, 보조 태그만 암살자)
+    plan = build_fight_plan(154, [54, 154, 61, 145, 111], [114, 121, 101, 67, 16], str, lambda c: tags(c, ()), "F", "T")
+    assert plan and plan[0]["text"].startswith("내가 먼저 들어가서 묶어요")
+    assert all(p["why"] for p in plan)
+    peel = [p for p in plan if "옆을 지켜요" in p["text"]]
+    assert peel and "121" in peel[0]["text"] and "67" not in peel[0]["text"]  # 베인은 파고드는 챔피언이 아님
+    assert any("74%" in p["why"] or "26%" in p["why"] for p in plan)  # 우리 데이터 한타 통계가 이유에 들어감
