@@ -1,7 +1,7 @@
 /* 게임 전 브리핑: 밴픽 30초 안에 "그래서 뭐 해?"에 답한다.
  * B1 맨 위엔 결론 한 문장 + 행동 하나 · B2 근거는 3줄, 나머지는 펼쳐서 · B4 스켈레톤·이전 결과 유지
  * B5 내 챔프폭 안에서만 추천(폭 밖은 펼쳐야 보임) · B6 경고는 하나만 · B7 시간은 게임 시계 형식 */
-import { $, api, champImg, empty, esc, evChips, linkify, mmss, openSheet, row, state } from "./core.js";
+import { $, $$, api, champImg, empty, esc, evChips, linkify, mmss, openSheet, row, state } from "./core.js";
 
 const STAGE = { planning: "픽 미리 찍는 중", banning: "밴하는 중", pre_my_pick: "내 픽 차례 전", post_my_pick: "내 픽 확정", final: "모두 확정" };
 const brief = { msg: null, ai: null, ended: false };
@@ -96,6 +96,7 @@ function draw() {
       ${picked ? heroPicked : heroPick}
       ${pledge ? `<div class="practice-row"><span class="badge yellow">이번 판 다짐</span> <span>만약 ${esc(pledge.text)}</span></div>
         <p class="sub" style="margin-top:6px">게임이 끝나면 이 다짐을 지켰는지 채점해요 · ${esc(pledge.from)}</p>` : ""}
+      ${picked ? gamePlan(b.game_plan, pool) : ""}
       <div class="btn-row">
         <button class="btn weak" id="more">근거와 세부 보기</button>
         ${picked && ai ? `<button class="btn grey" id="ai">${ai.status === "running" ? "AI 코치가 정리하는 중…" : ai.status === "ok" ? "AI 코치 정리 보기" : "AI 코치를 쓸 수 없어요"}</button>` : ""}
@@ -104,7 +105,28 @@ function draw() {
     </div></div>`;
 
   $("#more", viewEl).onclick = () => detailSheet(b, pool, my);
+  $$("[data-ph]", viewEl).forEach((r) => (r.onclick = () => phaseSheet(b.game_plan, +r.dataset.ph, pool)));
   $("#ai", viewEl)?.addEventListener("click", () => aiSheet(ai, pool));
+}
+
+/* 전체 운영: 지금 할 일(히어로) 아래에 게임 전체 흐름을 시간 순 4줄로. 세부는 눌러서 (B2) */
+function gamePlan(gp, pool) {
+  if (!gp || !gp.phases) return "";
+  return `<h2 class="section">전체 운영<small>우리 ${esc(gp.us.label)}${gp.them ? ` · 상대 ${esc(gp.them.label)}` : ""}</small></h2>
+    <div class="list">${gp.phases.map((p, i) => row({ lead: `<span class="tag num">${esc(p.time)}</span>`, title: linkify(p.headline),
+      sub: esc(p.title), attrs: `data-ph="${i}"` })).join("")}</div>
+    ${gp.vs ? `<p class="sub" style="margin-top:8px">${linkify(gp.vs)}</p>` : ""}`;
+}
+function phaseSheet(gp, i, pool) {
+  const p = gp.phases[i];
+  openSheet(`<div class="eyebrow num">${esc(p.time)} · ${esc(p.title)}</div><h2>${linkify(p.headline)}</h2>
+    <ul class="plain big">${p.items.map((x) => `<li class="${x.kind}">${x.kind === "rule" ? '<span class="badge blue">2026 규칙</span> ' : ""}${linkify(x.text)}${evChips(x.evidence, pool)}</li>`).join("")}</ul>
+    <p class="sub" style="margin-top:12px">'2026 규칙'은 실제 경기 시각으로 확인한 사실이고, 나머지는 조합과 코칭 자료로 정리한 판단이에요.</p>
+    <div class="card" style="margin-top:12px;background:var(--bg-layer)"><div class="eyebrow">조합을 이렇게 봤어요</div>
+      <p class="body" style="margin:4px 0 0">우리: ${esc(gp.us.label)} — ${esc(gp.us.why)}${gp.them ? `<br>상대: ${esc(gp.them.label)} — ${esc(gp.them.why)}` : ""}</p></div>
+    <div class="btn-row end">${i > 0 ? `<button class="btn grey m" id="ph-prev">이전 시간대</button>` : ""}${i < gp.phases.length - 1 ? `<button class="btn fill m" id="ph-next">다음 시간대</button>` : `<button class="btn fill m" data-close>닫기</button>`}</div>`);
+  $("#ph-prev")?.addEventListener("click", () => phaseSheet(gp, i - 1, pool));
+  $("#ph-next")?.addEventListener("click", () => phaseSheet(gp, i + 1, pool));
 }
 
 const josa2 = (name) => { const c = name.charCodeAt(name.length - 1) - 0xac00; return `${name}${c >= 0 && c <= 11171 && c % 28 ? "을" : "를"}`; };

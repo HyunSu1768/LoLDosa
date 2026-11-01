@@ -121,6 +121,7 @@ class BriefingEngine:
             ]
             b.cards = [c for c in b.cards if c and c.items]
             b.plan = self.build_plan(my_champ, enemy_jg)
+            b.game_plan = self.game_plan(state) or {}
             b.paths = self.paths_for(state, my_champ, enemy_jg)
         b.evidence = self.ev.items
         return b
@@ -707,6 +708,22 @@ class BriefingEngine:
         return out
 
     # ------------------------------------------------------------ plan
+
+    def game_plan(self, state: ChampSelectState) -> dict | None:
+        """전체 운영 플랜 (초반·중반·후반). 조합 성향과 2026 오브젝트 시간표로."""
+        from .gameplan import build_game_plan, traits
+
+        allies = [a.champion_id for a in state.allies if a.champion_id]
+        enemies = [x.champion_id for x in state.enemies if x.champion_id]
+        if len(allies) < 3:
+            return None
+        timing = self.ev.add("2026 오브젝트 시간: 드래곤 5:00, 공허 유충 8:00~14:45, 전령 15:00~19:45, 바론 20:00, 포탑 방패 영구, 아타칸 없음 — "
+                             "KR 솔랭 4,616판(패치 26.19~26.21)의 실제 처치 시각으로 확인", "실측 + 2026 패치노트 요약", 4616)
+        tr = traits()
+        trait = self.ev.add(f"챔피언 성향(묶기·포킹·같이 끊기·회복/보호막·혼자 민 포탑)을 실제 경기 {tr.get('games', 0):,}판에서 챔피언끼리 비교한 백분위. "
+                            "유형별 운영 방법은 코칭 자료 정리라서 판단으로 표시", "KR 솔랭 경기 기록 + 코칭 자료", tr.get("games"))
+        return build_game_plan(allies, enemies, {a.champion_id: a.position for a in state.allies}, self.facts,
+                               self.name, timing, trait)
 
     def build_plan(self, champ: int, enemy_jg: int) -> list[PlanLine]:
         """카드에서 모은 사실로 '이번 판 플랜'을 쉬운 말로. 근거가 없으면 그 줄은 만들지 않는다."""

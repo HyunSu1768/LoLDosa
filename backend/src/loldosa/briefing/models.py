@@ -62,6 +62,7 @@ class Briefing:
     notes: list[str] = field(default_factory=list)
     plan: list[PlanLine] = field(default_factory=list)
     paths: dict = field(default_factory=dict)  # 이미지 트레이닝: 대표 동선
+    game_plan: dict = field(default_factory=dict)  # 전체 운영: 조합 유형 + 초반·중반·후반 할 일
     picks: list[Recommendation] = field(default_factory=list)
     picks_outside: list[Recommendation] = field(default_factory=list)  # 챔프폭 밖 참고
     bans: list[Recommendation] = field(default_factory=list)

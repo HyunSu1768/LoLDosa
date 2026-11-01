@@ -16,4 +16,5 @@ LOLDOSA_DATA_DIR="$PROD" .venv/bin/loldosa bundle export
   pro="$VAL/pro_players.json" challenger="$VAL/challenger_players.json" apex="$DATA/matches.duckdb#apex" \
   platinum="$DATA/matches.duckdb#platinum" emerald="$DATA/matches.duckdb#emerald" diamond="$DATA/matches.duckdb#diamond"
 .venv/bin/python scripts/within_player.py "$DATA/raw" "$DATA/matches.duckdb" 6 | tail -3   # 같은 플레이어 안 비교 → 1순위 고르기
+.venv/bin/python scripts/build_champ_traits.py "$DATA"  # 조합 유형용 챔피언 성향
 .venv/bin/python -m pytest -q | tail -1
