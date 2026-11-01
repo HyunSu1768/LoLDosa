@@ -111,7 +111,7 @@ function draw() {
 
 /* 전체 운영: 지금 할 일(히어로) 아래에 게임 전체 흐름을 시간 순 4줄로. 세부는 눌러서 (B2) */
 function gamePlan(gp, pool) {
-  if (!gp || !gp.phases) return "";
+  if (!gp || !gp.phases || !gp.phases.length) return "";
   return `<h2 class="section">전체 운영<small>우리 ${esc(gp.us.label)}${gp.them ? ` · 상대 ${esc(gp.them.label)}` : ""}</small></h2>
     <div class="list">${gp.phases.map((p, i) => row({ lead: `<span class="tag num">${esc(p.time)}</span>`, title: linkify(p.headline),
       sub: esc(p.title), attrs: `data-ph="${i}"` })).join("")}</div>

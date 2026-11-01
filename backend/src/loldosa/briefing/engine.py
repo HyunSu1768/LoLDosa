@@ -723,7 +723,66 @@ class BriefingEngine:
         trait = self.ev.add(f"챔피언 성향(묶기·포킹·같이 끊기·회복/보호막·혼자 민 포탑)을 실제 경기 {tr.get('games', 0):,}판에서 챔피언끼리 비교한 백분위. "
                             "유형별 운영 방법은 코칭 자료 정리라서 판단으로 표시", "KR 솔랭 경기 기록 + 코칭 자료", tr.get("games"))
         return build_game_plan(allies, enemies, {a.champion_id: a.position for a in state.allies}, self.facts,
-                               self.name, timing, trait)
+                               self.name, timing, trait, self._plan_ctx(state, tr))
+
+    def _plan_ctx(self, state: ChampSelectState, tr: dict) -> dict:
+        """이 판에만 해당하는 사실: 라인 매치업 10분 골드 차, 상대 정글 습관, 후반에 강한 챔피언 (전 티어 전체 기간으로 표본 최대)."""
+        s = Scope("ALL", "all")
+        ctx: dict = {}
+        mine = {LCU_POS.get(a.position, ""): a.champion_id for a in state.allies if a.champion_id and a.position}
+        theirs = self.infer_enemy_roles(s, state)
+        shrink_k = 15
+        pairs = {"top": ["TOP"], "mid": ["MIDDLE"], "bot": ["BOTTOM", "UTILITY"]}
+        lanes = {}
+        for lane, poss in pairs.items():
+            gds, ns, who = [], 0, []
+            for pos in poss:
+                a, e = mine.get(pos), theirs.get(pos)
+                if not a or not e:
+                    continue
+                # 정확한 맞대결은 판 수가 적어서, 각자 그 라인 평균 10분 골드 차(판 수로 줄인 값)의 차이로 본다
+                ma, me_ = self.stats.lane_strength(s, pos, a), self.stats.lane_strength(s, pos, e)
+                if ma and me_ and min(ma["games"], me_["games"]) >= 15:
+                    ga = ma["gd10"] * ma["games"] / (ma["games"] + shrink_k)
+                    ge = me_["gd10"] * me_["games"] / (me_["games"] + shrink_k)
+                    gds.append(ga - ge)
+                    ns += min(ma["games"], me_["games"])
+                    who.append((self.name(a), self.name(e)))
+            if gds:
+                gd = sum(gds) / len(gds)
+                ally, enemy = "·".join(w[0] for w in who), "·".join(w[1] for w in who)
+                eid = self.e(f"{LANE_KO[lane]} {ally} vs {enemy}: 각자 그 라인에서 낸 10분 골드 차 평균의 차이 {gd:+.0f} (판 수로 줄인 값)", ns, s)
+                lanes[lane] = {"ally": ally, "enemy": enemy, "gd": gd, "n": ns, "eid": eid}
+        ctx["lanes"] = lanes
+        ej = theirs.get("JUNGLE")
+        if ej:
+            c, base = self.stats.champ(s, ej), self.stats.champ_baseline(s)
+            fg = self.stats.first_ganks(s, ej)
+            tot = sum(r["games"] for r in fg)
+            if c and c["games"] >= 20:
+                top = max(fg, key=lambda r: r["games"]) if fg else None
+                eid = self.e(f"{self.name(ej)} 정글 {c['games']}판: 첫 갱 라인 "
+                             + (", ".join(f"{r['lane']} {r['games'] / tot:.0%}" for r in fg) if tot else "기록이 없어요")
+                             + f", 상대 정글 몹 평균 {c['enemy_jungle_cs'] or 0:.1f}개(정글 평균 {base.get('invade') or 0:.1f}), "
+                             f"첫 드래곤 {c['first_dragon_rate'] or 0:.0%}(평균 {base.get('fd') or 0:.0%}), 첫 유충 {c['first_grub_rate'] or 0:.0%}(평균 {base.get('fg') or 0:.0%})",
+                             c["games"], s)
+                ctx["ejg"] = {"name": self.name(ej), "n": c["games"], "eid": eid,
+                              "gank_lane": top["lane"] if top and tot >= 15 else None,
+                              "gank_share": (top["games"] / tot) if top and tot else 0, "gank_s": top["median_s"] if top else None,
+                              "invade": c["enemy_jungle_cs"], "invade_base": base.get("invade") or 0,
+                              "fd": c["first_dragon_rate"], "fd_base": base.get("fd"), "fg": c["first_grub_rate"], "fg_base": base.get("fg")}
+        champs = tr.get("champions", {})
+
+        def late_list(ids):
+            rows = [(self.name(c), champs[str(c)]["late_diff"]) for c in ids if str(c) in champs]
+            return sorted([r for r in rows if r[1] >= 0.02], key=lambda r: -r[1]), sum(r[1] for r in rows) / max(len(rows), 1)
+
+        al, asum = late_list([a.champion_id for a in state.allies if a.champion_id])
+        el, esum = late_list([x.champion_id for x in state.enemies if x.champion_id])
+        ctx["late"] = {"ally": al, "enemy": el, "ally_sum": asum, "enemy_sum": esum,
+                       "eid": self.ev.add("챔피언별 '30분 이후 승률 − 25분 전 승률' (KR 솔랭 경기 기록, 판 수로 줄인 값)의 팀 평균", "KR 솔랭 경기 기록",
+                                          tr.get("games"))}
+        return ctx
 
     def build_plan(self, champ: int, enemy_jg: int) -> list[PlanLine]:
         """카드에서 모은 사실로 '이번 판 플랜'을 쉬운 말로. 근거가 없으면 그 줄은 만들지 않는다."""
@@ -747,9 +806,7 @@ class BriefingEngine:
             why = f" — {', '.join(gl['why'][:2])}" if gl["why"] else ""
             plan.append(PlanLine("첫 갱", f"{when}에 {LANE_KO[gl['lane']]}부터 갱을 가 보세요{why}",
                                  gl["eids"] + ([gt["eid"]] if gt else [])))
-        elif gt:
-            plan.append(PlanLine("첫 갱", f"{when}에 라인 주도권이 있는 쪽으로 첫 갱을 가 보세요. 라인별 차이는 크지 않아요",
-                                 [gt["eid"]]))
+        # 갱 라인 근거가 없으면 '주도권 있는 쪽' 같은 일반론은 쓰지 않는다 (전체 운영의 라인 매치업 줄이 대신함)
 
         warn, warn_ev = [], []
         es = f.get("enemy_side3")
@@ -782,22 +839,9 @@ class BriefingEngine:
                 t = ot["dragon"] if os_["side"] == "dragon" else ot["grub"]
                 plan.append(PlanLine("오브젝트", f"{lane} 라인전이 유리해서 {target}부터 노려요 (고티어 보통 {mmss(t)})."
                                      f"{reset or ' 라인 주도권을 지켜 주세요.'}", os_["eids"] + [ot["eid"]]))
-            else:
-                plan.append(PlanLine("오브젝트", f"첫 싸움은 보통 유충 {mmss(ot['grub'])}, 드래곤 {mmss(ot['dragon'])}쯤 나요. "
-                                     f"주도권이 있는 쪽 오브젝트로 가요.{reset}", [ot["eid"]]))
-        turns = f.get("turns", {})
-        for obj in ("DRAGON", "HORDE"):
-            tf = turns.get(obj)
-            if tf and tf["useful"] and tf["median"]:
-                lo, hi = tf["median"] - 150, tf["median"] - 40
-                plan.append(PlanLine("귀환", f"{OBJ_TURN_KO[obj]}(보통 {mmss(tf['median'])}) 직전 30초엔 본진에 있으면 안 돼요. "
-                                     f"그때 귀환한 팀은 {pct(tf['rate']['late'])}만 가져갔어요. 귀환은 {mmss(lo)}~{mmss(hi)}에 끝내 두세요", [tf["eid"]]))
-                break
-        sc = f.get("scaling")
-        if sc:
-            text = ("상대가 후반 조합이라, 오브젝트로 차이를 벌려서 25분 전후에 끝내 보세요" if sc["who"] == "enemy"
-                    else "우리가 후반 조합이라, 초반 손해만 피하고 오브젝트를 맞교환하며 시간을 벌어요")
-            plan.append(PlanLine("운영", text, [sc["eid"]]))
+            # 어느 쪽이 유리한지 근거가 없으면 일반 시간표는 쓰지 않는다 (모든 판에 똑같이 나와서 의미가 없음)
+        # 귀환 턴(오브젝트 직전 귀환)은 모든 판에 똑같은 일반 규칙이라 판마다 띄우지 않고 배우기 탭 개념으로 둔다
+        # 후반 힘은 전체 운영 '20분~' 줄에서 챔피언 이름과 숫자로 말한다 (여기선 반복하지 않음)
         for line in plan:
             line.concepts = PLAN_CONCEPTS.get(line.title, [])
         return plan

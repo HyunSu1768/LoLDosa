@@ -110,6 +110,14 @@ class StatsDB:
 
     # ---- 정글 챔피언 -----------------------------------------------------------
 
+    def champ_baseline(self, s: Scope) -> dict:
+        """정글 챔피언 평균 (판 수 가중): 상대 정글 습관이 평균과 다른지 비교할 때."""
+        w, p = self._w(s)
+        return self.one(f"""SELECT sum(enemy_jungle_cs * games) / sum(games) AS invade,
+                                   sum(first_dragon_rate * games) / sum(games) AS fd,
+                                   sum(first_grub_rate * games) / sum(games) AS fg
+                            FROM champ_stats WHERE {w}""", p) or {}
+
     def champ(self, s: Scope, champ: int) -> dict | None:
         w, p = self._w(s)
         r = self.one(f"SELECT * FROM champ_stats WHERE {w} AND champion_id=?", p + [champ])
@@ -229,6 +237,13 @@ class StatsDB:
         w, p = self._w(s)
         return self.one(f"""SELECT games, wins, gd10 FROM lane_matchups
                             WHERE {w} AND position=? AND champion_id=? AND enemy_id=?""", p + [position, champ, enemy])
+
+    def lane_strength(self, s: Scope, position: str, champ: int) -> dict | None:
+        """그 라인에서 이 챔피언의 10분 골드 차 평균 (모든 상대 합산). 특정 맞대결은 판 수가 적어서 이걸로 라인 우세를 본다."""
+        w, p = self._w(s)
+        return self.one(f"""SELECT sum(games) AS games, sum(gd10 * games) / sum(games) AS gd10 FROM lane_matchups
+                            WHERE {w} AND position=? AND champion_id=? AND gd10 IS NOT NULL HAVING sum(games) > 0""",
+                        p + [position, champ])
 
     def gank_exposure(self, s: Scope, position: str, champ: int) -> dict | None:
         w, p = self._w(s)
