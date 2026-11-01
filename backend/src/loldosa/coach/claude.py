@@ -26,8 +26,12 @@ SYSTEM = """너는 리그 오브 레전드 정글 코치다. 사용자는 지금
 7. 한국 롤 커뮤니티에서 실제로 쓰는 말로 쓴다. 예: 풀캠, 3캠 갱, 라인 주도권, 바위게, 역갱, 카정, 귀환, 오브젝트 세팅, 핑와, 라인 박기, 상대 정글.
    번역투·영어 직역은 쓰지 않는다: 스커틀→바위게, 우선권/프리오→주도권, 리셋→귀환, 스폰→젠·나오다, 클리어 완료→풀캠·먹은 캠프, 개입/관여→갱·합류, ~창(window)→~타이밍, 표본→판 수.
    문장은 짧은 해요체(~해요, ~하세요)로 쓴다. '~합니다', '~입니다'는 쓰지 않는다.
-형식: {"headline": "이번 판 한 줄 운영 방향", "points": [{"phase": "0-3분|3-8분|8-15분|15분+|전체", "text": "...", "evidence": ["E1"]}]}
-points 는 3~4개, 시간 순서로."""
+8. GAME_PLAN 은 규칙으로 만든 전체 운영 뼈대예요. 시간대(~5분, 5~15분, 15~20분, 20분~)와 방향을 바꾸지 말고,
+   카드 근거(라인별 갭 각, 상대 정글 위치, 레벨대 싸움 승률 등)와 양 팀 조합 이유(어떤 챔피언이 무엇을 잘하는지)를 엮어서
+   이번 판에 맞는 구체적인 행동으로 풀어 써요. 조합 이유에 나온 챔피언 이름은 그대로 써도 돼요.
+9. 시간·규칙은 GAME_PLAN 의 '2026 규칙' 항목에 있는 것만 써요. 아타칸·힘의 위업·14분 방패 같은 예전 규칙은 쓰지 않아요.
+형식: {"headline": "이번 판 한 줄 운영 방향", "points": [{"phase": "~5분|5~15분|15~20분|20분~", "text": "...", "evidence": ["E1"]}]}
+points 는 4~5개, 시간대마다 1개 이상, 시간 순서로."""
 
 
 REVIEW_SYSTEM = """너는 리그 오브 레전드 정글 코치다. 사용자가 끝난 경기를 복기하고 있다.
@@ -106,8 +110,21 @@ def build_prompt(briefing: dict) -> str:
         "cards": cards,
         "EVIDENCE": evidence,
     }
-    return ("아래 브리핑 데이터만 근거로 이번 판 정글 운영 방향을 정리해줘.\n"
+    gp = briefing.get("game_plan") or {}
+    if gp.get("phases"):
+        payload["GAME_PLAN"] = {
+            "우리 조합": f"{gp['us']['label']} — {gp['us']['why']}",
+            "상대 조합": f"{gp['them']['label']} — {gp['them']['why']}" if gp.get("them") else "미확정",
+            "상대 조합 대처": gp.get("vs"),
+            "phases": [{"time": p["time"], "headline": p["headline"],
+                        "items": [{"text": i["text"], "kind": "2026 규칙" if i["kind"] == "rule" else "판단", "evidence": i["evidence"]}
+                                  for i in p["items"]]} for p in gp["phases"]],
+        }
+    return ("아래 브리핑 데이터만 근거로 이번 판 정글 운영 방향을 게임 시작부터 끝까지 정리해줘.\n"
             + json.dumps(payload, ensure_ascii=False))
+
+
+OUTDATED = ("아타칸", "위업", "방패가 떨어", "방패 떨어", "14분 방패", "14:00에 방패")  # 2026 에 없는 규칙
 
 
 def parse_and_validate(text: str, valid_ids: set[str]) -> dict:
@@ -118,7 +135,7 @@ def parse_and_validate(text: str, valid_ids: set[str]) -> dict:
     points, dropped = [], 0
     for p in data.get("points") or []:
         ev = [e for e in (p.get("evidence") or []) if e in valid_ids]
-        if not ev or not str(p.get("text", "")).strip():
+        if not ev or not str(p.get("text", "")).strip() or any(w in p["text"] for w in OUTDATED):
             dropped += 1
             continue
         points.append({"phase": p.get("phase", ""), "text": p["text"].strip(), "evidence": ev})

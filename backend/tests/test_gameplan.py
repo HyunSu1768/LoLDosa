@@ -16,3 +16,14 @@ def test_plan_has_four_phases_and_2026_rules_only():
         assert banned not in text
     assert all(i["evidence"] == ["E1"] for p in gp["phases"] for i in p["items"] if i["kind"] == "rule")
     assert gp["vs"] and gp["them"]["type"] == "split"
+
+
+def test_ai_prompt_gets_game_plan_and_drops_outdated_rules():
+    from loldosa.coach.claude import build_prompt, parse_and_validate
+
+    gp = build_game_plan([54, 64, 61, 145, 111], [114, 121, 101, 81, 16], {}, {}, str, "E1", "E2")
+    prompt = build_prompt({"cards": [], "evidence": [], "game_plan": gp})
+    assert "GAME_PLAN" in prompt and "5~15분" in prompt
+    out = parse_and_validate('{"headline":"h","points":[{"phase":"20분~","text":"아타칸을 먼저 쳐요","evidence":["E1"]},'
+                             '{"phase":"~5분","text":"풀캠 후 바위게","evidence":["E1"]}]}', {"E1"})
+    assert [p["text"] for p in out["points"]] == ["풀캠 후 바위게"] and out["dropped"] == 1
