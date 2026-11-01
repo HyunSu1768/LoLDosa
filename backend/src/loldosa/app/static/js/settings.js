@@ -33,6 +33,8 @@ export async function renderSettings(view) {
       ${row({ lead: cl.logged_in ? "✅" : "🤖", title: !cl.installed ? "Claude가 설치돼 있지 않아요" : !cl.logged_in ? "Claude 로그인이 필요해요" : "Claude에 로그인돼 있어요",
         sub: !cl.installed ? "눌러서 공식 설치 스크립트로 설치해요" : !cl.logged_in ? "눌러서 Claude 로그인 창을 열어요" : `로그인 방식: ${cl.auth_method === "claude.ai" ? "Claude 구독" : esc(cl.auth_method || "")}`,
         attrs: 'data-act="claude"' })}
+      <label class="row"><div class="mid"><div class="title">롤 창 옆에 붙이기</div><div class="sub">롤 클라이언트 바깥쪽에 붙어서 같이 움직여요. 창을 끌어서 떼면 그 자리에 있어요 (Windows)</div></div>
+        <input type="checkbox" class="toggle" data-key="dock_enabled" ${s.dock_enabled !== false ? "checked" : ""}></label>
       <label class="row"><div class="mid"><div class="title">근거 판 수 보기</div><div class="sub">문장마다 몇 판을 보고 말했는지 작게 보여 줘요</div></div>
         <input type="checkbox" class="toggle" id="ev" ${document.body.classList.contains("show-ev") ? "checked" : ""}></label>
     </div>

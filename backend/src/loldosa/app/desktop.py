@@ -15,6 +15,8 @@ import uvicorn
 from .server import create_app
 
 
+TITLE = "LoLDosa · 정글 코치"  # 롤 창 옆에 붙일 때 이 제목으로 우리 창을 찾는다
+
 # 앱 창을 못 띄워 브라우저로 열었을 때 이유 (설정·홈에서 보여 준다)
 window_error: str | None = None
 
@@ -104,8 +106,14 @@ def run(replay: Path | None = None, port: int = 8765, browser: bool = False, ai:
     while not server.started:
         time.sleep(0.05)
     try:
-        webview.create_window("LoLDosa · 정글 코치", url, width=1180, height=860, min_size=(820, 600))
-        webview.start()
+        from ..settings import UserSettings
+        from ..config import load_settings
+        from . import dock
+
+        on = UserSettings.load(load_settings().data_dir).dock_enabled
+        # 롤 클라이언트 옆에 붙으면 폭이 480 정도라 최소 폭을 낮춘다 (좁은 화면 레이아웃이 따로 있음)
+        webview.create_window(TITLE, url, width=1180, height=860, min_size=(400, 560))
+        webview.start(lambda: dock.start(TITLE, on))
     except Exception as e:  # noqa: BLE001 — WebView2 가 없는 PC(PC방 등)에서는 브라우저로 연다
         window_error = f"창을 여는 중에 오류가 났어요 ({type(e).__name__}: {e})"
         print(f"앱 창을 띄우지 못해서 브라우저로 열어요: {window_error}")

@@ -477,8 +477,11 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
                 meta = stats.meta()
         from . import desktop
 
+        from . import dock
+
         return {
             "window_error": desktop.window_error,
+            "dock": dock.state,
             "lcu": find_credentials() is not None or replay is not None,
             "replay": str(replay) if replay else None,
             "stats": meta,
@@ -499,6 +502,10 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
         if "riot_id" in patch and patch["riot_id"] != user.riot_id:
             patch["puuid"] = ""
         user.update(patch).save(settings.data_dir)
+        if "dock_enabled" in patch:
+            from . import dock
+
+            dock.set_enabled(bool(patch["dock_enabled"]))
         return asdict(user)
 
     @app.get("/api/champions")
