@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from ..analysis.decisions import (ACTION_CONCEPTS, ACTION_KO, ACTIONS, classify_action, load_match,
                                   outcome, similar, state_vector, summarize)
-from ..analysis.geometry import relative_region
+from ..analysis.geometry import map_side, relative_region
 from ..analysis.items import can_buy, gold_as_items, gold_diff_say, prices as item_prices
 from ..analysis.turns import shop_visits
 from ..briefing.engine import josa, mmss, signed
@@ -91,8 +91,9 @@ def score_actions(crowd: list[dict]) -> list[dict]:
         c["score"] = round((c["swing"] or 0) - DEATH_COST * c["died"] + OBJ_VALUE * c["obj"]) if ok else None
     scored = [c for c in crowd if c["score"] is not None]
     top = max((c["score"] for c in scored), default=None)
-    for c in crowd:
-        c["best"] = top is not None and c["score"] is not None and c["score"] >= top - NEAR
+    first = next((c for c in scored if c["score"] == top), None)
+    for c in crowd:  # 결과 1위 배지는 하나만 (비슷한 점수에 여러 개 붙이면 무엇이 1위인지 헷갈림)
+        c["best"] = c is first
     return [c["action"] for c in crowd if c["share"] >= POPULAR]
 
 
@@ -102,17 +103,130 @@ def _prices() -> dict:
     return item_prices(str(load_settings().data_dir))
 
 
-def snapshot(md, champs: ChampionIndex, pid: int, epid: int, team: int, m: int, st: dict) -> dict:
+def _units(md, champs: ChampionIndex, pid: int, epid: int, team: int, m: int) -> list[dict]:
     units = []
     for q, p in md.parts.items():
         f = md.frames.get((q, m))
         if not f or f["x"] is None:
             continue
         c = champs.get(p["champion_id"])
-        units.append({"x": f["x"], "y": f["y"], "key": c.key if c else "", "name": c.name if c else "",
+        units.append({"pid": q, "x": f["x"], "y": f["y"], "key": c.key if c else "", "name": c.name if c else "",
                       "ally": p["team"] == team, "me": q == pid, "enemy_jungler": q == epid,
                       "level": f["level"], "hp": round((f["hp"] / f["hp_max"]) * 100) if f.get("hp") is not None and f.get("hp_max") else None,
                       "position": p["position"]})
+    return units
+
+
+FOUNTAIN = {100: (560, 560), 200: (14300, 14300)}
+SIDE_KO = {"top": "탑 쪽", "bot": "봇 쪽"}
+MONSTER_KO = {"DRAGON": "드래곤", "HORDE": "공허 유충", "RIFTHERALD": "전령", "BARON_NASHOR": "바론", "ATAKHAN": "아타칸"}
+
+
+def _place(team, x, y) -> str:
+    """'우리 정글 탑 쪽' · '봇 라인' (라인·본진은 쪽을 붙이지 않음)"""
+    r = relative_region(team, x, y)
+    return f"{REGION_KO.get(r, r)} {SIDE_KO[map_side(x, y)]}" if r in ("own_jungle", "enemy_jungle", "river") else REGION_KO.get(r, r)
+
+
+def _merged(events: list) -> list:
+    """유충처럼 몇 초 사이에 여러 마리 잡힌 오브젝트는 한 줄로 (n 마리)."""
+    out = []
+    for e in events:
+        prev = out[-1] if out else None
+        if (prev and e["type"] == prev["type"] == "ELITE_MONSTER_KILL" and e["monster_type"] == prev["monster_type"]
+                and e["team_id"] == prev["team_id"] and e["ts_ms"] - prev["_last"] <= 40_000):
+            prev["_n"] += 1
+            prev["_last"] = e["ts_ms"]
+            continue
+        out.append({**e, "_n": 1, "_last": e["ts_ms"]})
+    return out
+
+
+def _who(md, champs, q, team) -> str:
+    p = md.parts.get(q)
+    if not p:
+        return "미니언·포탑"
+    c = champs.get(p["champion_id"])
+    return f"{'우리' if p['team'] == team else '상대'} {c.name if c else '?'}"
+
+
+def _event_text(md, champs, e, pid, team) -> str:
+    where = REGION_KO.get(relative_region(team, e["x"], e["y"]), "") if e.get("x") is not None else ""
+    if e["type"] == "ELITE_MONSTER_KILL":
+        side = "우리 팀" if e["team_id"] == team else "상대 팀"
+        name = MONSTER_KO.get(e["monster_type"], "오브젝트")
+        n = e.get("_n", 1)
+        return f"{side}이 {name} {n}마리를 잡았어요" if n > 1 else f"{side}이 {josa(name, '을를')} 잡았어요"
+    killer = "내가" if e["participant_id"] == pid else josa(_who(md, champs, e["participant_id"], team), "이가")
+    victim = "나를" if e["victim_id"] == pid else josa(_who(md, champs, e["victim_id"], team), "을를")
+    helped = " · 나도 같이 싸웠어요" if pid in (e["assists"] or []) else ""
+    return f"{where}에서 {killer} {victim} 잡았어요{helped}".strip()
+
+
+def _relevant(e, pid, epid) -> bool:
+    if e["type"] == "ELITE_MONSTER_KILL":
+        return True
+    return pid in (e["participant_id"], e["victim_id"]) or pid in (e["assists"] or []) \
+        or epid in (e["participant_id"], e["victim_id"]) or epid in (e["assists"] or [])
+
+
+def story(md, champs, pid: int, epid: int, team: int, m: int, visits) -> dict:
+    """그 순간까지 내 흐름: 분마다 위치·정글 CS + 귀환·킬·데스·오브젝트 (시간 순). 시간만 보고는 기억이 안 나서."""
+    t_ms = m * 60_000
+    items = []
+    for k in range(1, m + 1):
+        f = md.frames.get((pid, k))
+        if f and f["x"] is not None:
+            items.append({"t": k * 60, "text": f"{_place(team, f['x'], f['y'])}에 있었어요 · 정글 CS {f['jcs']}", "kind": "pos"})
+    mine_v = [v for v in visits if v.participant_id == pid and v.ts_ms < t_ms]
+    for v in mine_v:
+        items.append({"t": v.ts_ms / 1000, "text": "죽고 나서 아이템을 샀어요" if v.death_back else "귀환해서 아이템을 샀어요", "kind": "recall"})
+    for e in _merged([e for e in md.events if e["ts_ms"] < t_ms and _relevant(e, pid, epid)]):
+        items.append({"t": e["ts_ms"] / 1000, "text": _event_text(md, champs, e, pid, team), "kind": "event"})
+    items.sort(key=lambda x: x["t"])
+    f_now = md.frames.get((pid, m)) or {}
+    if not mine_v:
+        head = f"아직 첫 귀환 전이에요. 시작부터 쭉 돌아서 지금 정글 CS {f_now.get('jcs', 0)}개예요."
+    else:
+        v = mine_v[-1]
+        f_then = md.frames.get((pid, int(v.ts_ms // 60000))) or {}
+        gained = (f_now.get("jcs") or 0) - (f_then.get("jcs") or 0)
+        head = (f"{mmss(v.ts_ms / 1000)}에 {'죽고 나서 ' if v.death_back else ''}귀환했다가 다시 나온 상태예요. "
+                + (f"그 뒤 정글 CS {gained}개를 더 먹었어요." if gained > 0 else "그 뒤로 아직 정글 몹은 안 먹었어요."))
+    return {"head": head, "items": items[-10:]}
+
+
+def after(md, champs, pid: int, epid: int, team: int, m: int, visits) -> list[dict]:
+    """실제로 이어진 2분: 분마다 찍힌 위치 + 그 사이 정확한 시각의 사건(킬·오브젝트·내 귀환). 한 단계씩 넘겨 본다."""
+    steps = [{"t": m * 60, "text": "이 순간 실제 위치예요", "units": _units(md, champs, pid, epid, team, m)}]
+    t0, t1 = m * 60_000, (m + 2) * 60_000
+    evs = [("ev", e["ts_ms"], e) for e in _merged([e for e in md.events if t0 < e["ts_ms"] <= t1 and _relevant(e, pid, epid)])]
+    evs += [("recall", v.ts_ms, v) for v in visits if v.participant_id == pid and t0 < v.ts_ms <= t1]
+    evs += [("frame", k * 60_000, None) for k in (m + 1, m + 2) if (pid, k) in md.frames]
+    for kind, ts, e in sorted(evs, key=lambda x: x[1]):
+        k = int(ts // 60_000)
+        if kind == "frame":
+            steps.append({"t": ts / 1000, "text": "1분 뒤 위치예요" if k == m + 1 else "2분 뒤 위치예요",
+                          "units": _units(md, champs, pid, epid, team, k)})
+            continue
+        units = [dict(u) for u in steps[-1]["units"]]  # 사건 사이 위치는 모르니 직전 위치 그대로 두고, 사건에 낀 챔피언만 옮긴다
+        if kind == "recall":
+            x, y = FOUNTAIN[team]
+            text = "죽고 나서 아이템을 샀어요" if e.death_back else "내가 귀환해서 아이템을 샀어요"
+            moved = {pid}
+        else:
+            x, y = e["x"], e["y"]
+            text = _event_text(md, champs, e, pid, team)
+            moved = {e["participant_id"], e["victim_id"], *(e["assists"] or [])} if e["type"] == "CHAMPION_KILL" else {e["participant_id"]}
+        for u in units:
+            if u["pid"] in moved and x is not None:
+                u["x"], u["y"] = x, y
+        steps.append({"t": ts / 1000, "text": text, "units": units, "mark": {"x": x, "y": y} if x is not None else None})
+    return steps
+
+
+def snapshot(md, champs: ChampionIndex, pid: int, epid: int, team: int, m: int, st: dict) -> dict:
+    units = _units(md, champs, pid, epid, team, m)
     objs = []
     if st["to_dragon"] < 999:
         objs.append({"name": "드래곤", "x": PIT["dragon"][0], "y": PIT["dragon"][1],
@@ -210,6 +324,8 @@ def build_moments(con, stats, champs: ChampionIndex, match_id: str, puuid: str) 
         out.append({
             "minute": m, "t": m * 60, "reason": why,
             "snapshot": snapshot(md, champs, me, epid, team, m, st),
+            "story": story(md, champs, me, epid, team, m, visits),
+            "after": after(md, champs, me, epid, team, m, visits),
             "choices": [{"action": a, "label": ACTION_KO[a]} for a in choices],
             "mine": {"action": mine, "label": ACTION_KO[mine], "swing": res["swing"], "swing_say": swing_say(res["swing"], pr),
                      "died": res["died"], "obj": res["obj"]},

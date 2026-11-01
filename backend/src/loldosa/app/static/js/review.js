@@ -171,6 +171,7 @@ async function loadMoments(matchId, box) {
     box.innerHTML = `<h2 class="section">그 순간, 고수라면?<small>${i + 1} / ${list.length}</small></h2>
       <section class="card moment">
         <div class="eyebrow num">${mo.minute}:00 · ${esc(mo.reason)}</div>
+        ${mo.story ? storyBox(mo.story) : ""}
         <div class="mo-grid"><div class="mo-map">${board(mo.snapshot)}</div>
           <div><ul class="plain">${mo.snapshot.facts.filter((f) => !f.startsWith("라인:")).map((f) => `<li>${linkify(f)}</li>`).join("")}</ul>
             ${tr ? `<div class="q-step" id="q-track"><div class="title" style="margin:16px 0 8px">1. ${esc(tr.q)}</div>
@@ -197,6 +198,46 @@ async function loadMoments(matchId, box) {
   draw();
 }
 
+/* 시간만 보고는 그 판이 기억나지 않아서: 그 순간까지 내가 어떻게 왔는지 (귀환·킬·데스·위치)를 먼저 보여 준다 */
+function storyBox(st) {
+  const row = (i) => `<li class="${i.kind}"><span class="num">${mmss(i.t)}</span><span>${esc(i.text)}</span></li>`;
+  const recent = st.items.slice(-4), older = st.items.slice(0, -4);
+  return `<div class="story"><div class="title">${esc(st.head)}</div>
+    <ol class="tl">${older.length ? `<details><summary class="sub">앞의 흐름 ${older.length}개 더 보기</summary>${older.map(row).join("")}</details>` : ""}${recent.map(row).join("")}</ol></div>`;
+}
+
+/* 답한 뒤: 실제로 이어진 2분을 지도에서 한 단계씩 (분마다 위치 + 그 사이 정확한 시각의 사건) */
+function playAfter(mo, box) {
+  const steps = mo.after || [];
+  if (steps.length < 2) return;
+  let k = 0, timer = null;
+  const host = $(".mo-map", box);
+  const show = () => {
+    const st = steps[k];
+    const snap = { ...mo.snapshot, units: st.units, objectives: [], last_seen: null, mark: st.mark,
+      caption: `${mmss(st.t)} · ${st.text}` };
+    host.innerHTML = `<div class="eyebrow" style="margin-bottom:8px">실제로 이어진 2분</div>${board(snap, 380, true)}
+      <div class="player"><button class="btn grey s" data-p="-1" ${k === 0 ? "disabled" : ""} aria-label="이전">◀</button>
+        <button class="btn fill s" data-p="play">${timer ? "멈추기" : k === steps.length - 1 ? "처음부터" : "재생"}</button>
+        <button class="btn grey s" data-p="1" ${k === steps.length - 1 ? "disabled" : ""} aria-label="다음">▶</button>
+        <span class="sub num">${k + 1} / ${steps.length}</span></div>
+      <ol class="tl after">${steps.map((x, j) => `<li class="${j === k ? "on" : ""}" data-j="${j}"><span class="num">${mmss(x.t)}</span><span>${esc(x.text)}</span></li>`).join("")}</ol>
+      <p class="sub">위치는 1분마다 기록돼요. 그 사이 사건은 정확한 시각과 장소이고, 사건에 낀 챔피언만 그 자리로 옮겨 그렸어요.</p>`;
+  };
+  const stop = () => { clearInterval(timer); timer = null; };
+  host.onclick = (e) => {
+    const p = e.target.closest("[data-p]")?.dataset.p, j = e.target.closest("[data-j]")?.dataset.j;
+    if (j != null) { stop(); k = +j; }
+    else if (p === "play") {
+      if (timer) stop();
+      else { if (k === steps.length - 1) k = 0; timer = setInterval(() => { if (k < steps.length - 1) k++; else stop(); show(); }, 1600); }
+    } else if (p) { stop(); k = Math.max(0, Math.min(steps.length - 1, k + +p)); }
+    else return;
+    show();
+  };
+  show();
+}
+
 function reveal(matchId, mo, box, choice) {
   if (box.dataset.done === `${mo.minute}`) return;
   box.dataset.done = `${mo.minute}`;
@@ -215,6 +256,7 @@ function reveal(matchId, mo, box, choice) {
     <p class="sub" style="margin-top:8px">실제 내 선택: '${esc(mo.mine.label)}' · 2분 뒤 ${esc(mo.mine.swing_say || "")}${mo.mine.died ? " · 내가 죽었어요" : ""}</p>
     <div class="btn-row"><button class="btn weak s" id="mo-replay">이 장면 리플레이로 보기</button></div>`;
   $("#mo-replay", box).onclick = () => openReplay(matchId, mo.t);
+  playAfter(mo, box);
   post("/api/moments/answer", { match_id: matchId, minute: mo.minute, choice, good, track_ok: mo._trackOk ?? null, concepts: mo.concepts.map((c) => c.id),
     moment: { match_id: matchId, minute: mo.minute, t: mo.t, reason: mo.reason, snapshot: mo.snapshot, choices: mo.choices,
       crowd: mo.crowd.slice(0, 6), good: mo.good, verdict: mo.verdict, mine: mo.mine, k: mo.k, pool_label: mo.pool_label, concepts: mo.concepts } }).catch(() => {});
@@ -228,8 +270,17 @@ export function board(snap, size = 380, reveal = false) {
   const ver = state.ddragon;
   const mapUrl = ver ? `https://ddragon.leagueoflegends.com/cdn/${ver}/img/map/map11.png` : "";
   const units = [...snap.units].filter((u) => reveal || !u.hidden).sort((a, b) => (a.me ? 1 : a.enemy_jungler ? 0.5 : 0) - (b.me ? 1 : b.enemy_jungler ? 0.5 : 0));
+  // 같은 자리(사건 위치 등)에 겹친 초상화는 둥글게 벌려 놓는다. 안 그러면 얼굴과 '나'·'상대 정글' 글자가 겹쳐 안 읽혀요
+  const near = (a, b) => Math.hypot(X(a.x) - X(b.x), Y(a.y) - Y(b.y)) < R * 1.6;
+  const groups = [];
+  for (const u of units) { const g = groups.find((g) => near(g[0], u)); if (g) g.push(u); else groups.push([u]); }
+  const pos = new Map();
+  for (const g of groups) g.forEach((u, j) => {
+    const a = (j / g.length) * Math.PI * 2 - Math.PI / 2, d = g.length > 1 ? R * 1.25 : 0;
+    pos.set(u, [X(g[0].x) + Math.cos(a) * d, Y(g[0].y) + Math.sin(a) * d]);
+  });
   const tok = units.map((u, i) => {
-    const cx = X(u.x), cy = Y(u.y), big = u.me || u.enemy_jungler, r = big ? R + 3 : R;
+    const [cx, cy] = pos.get(u), big = u.me || u.enemy_jungler, r = big ? R + 3 : R;
     const ring = u.me ? "var(--mm-me)" : u.ally ? "var(--mm-ally)" : "var(--mm-enemy)";
     const img = u.key && ver ? `https://ddragon.leagueoflegends.com/cdn/${ver}/img/champion/${u.key}.png` : "";
     const tag = u.me ? "나" : u.enemy_jungler ? "상대 정글" : "";
@@ -243,6 +294,7 @@ export function board(snap, size = 380, reveal = false) {
   const ls = snap.last_seen;
   const seenMark = ls && !reveal ? `<g class="mm-seen"><circle cx="${X(ls.x)}" cy="${Y(ls.y)}" r="${R + 3}"/><text x="${X(ls.x)}" y="${Y(ls.y) + 5}" text-anchor="middle">?</text>
       <g class="mm-tag ejg"><rect x="${X(ls.x) - 62}" y="${Y(ls.y) + R + 6}" width="124" height="20" rx="10"/><text x="${X(ls.x)}" y="${Y(ls.y) + R + 20}" text-anchor="middle">상대 정글 ${mmss(ls.t)}에 봄</text></g></g>` : "";
+  const mk = snap.mark ? `<circle class="mm-mark" cx="${X(snap.mark.x)}" cy="${Y(snap.mark.y)}" r="${R + 12}"/>` : "";
   const objs = snap.objectives.map((o) => `<g class="mm-obj"><rect x="${X(o.x) - 46}" y="${Y(o.y) - 11}" width="92" height="22" rx="11"/>
     <text x="${X(o.x)}" y="${Y(o.y) + 5}" text-anchor="middle">${esc(o.name)} ${esc(o.text)}</text></g>`).join("");
   const li = snap.lane_items || {};
@@ -257,8 +309,8 @@ export function board(snap, size = 380, reveal = false) {
     <svg class="minimap" viewBox="0 0 ${S} ${S}" role="img" aria-label="${snap.minute}분 미니맵">
       ${mapUrl ? `<image href="${mapUrl}" width="${S}" height="${S}" preserveAspectRatio="none"/>` : `<rect width="${S}" height="${S}" fill="#0b1a14"/>`}
       <rect width="${S}" height="${S}" fill="none" stroke="#c8aa6e" stroke-width="3"/>
-      ${objs}${seenMark}${tok}</svg>
-    <figcaption class="sub">${snap.minute}:00 순간 위치${reveal ? "" : " · 상대 정글은 마지막으로 본 곳(?)만"} · 우리 팀은 ${snap.team === 100 ? "블루(왼쪽 아래)" : "레드(오른쪽 위)"} · 테두리 <span style="color:var(--mm-me)">금색 나</span> · <span style="color:var(--mm-ally)">파랑 아군</span> · <span style="color:var(--mm-enemy)">빨강 상대</span></figcaption>
+      ${objs}${seenMark}${tok}${mk}</svg>
+    <figcaption class="sub">${snap.caption ? `<b style="color:var(--grey900)">${esc(snap.caption)}</b>` : `${snap.minute}:00 순간 위치`}${reveal ? "" : " · 상대 정글은 마지막으로 본 곳(?)만"} · 우리 팀은 ${snap.team === 100 ? "블루(왼쪽 아래)" : "레드(오른쪽 위)"} · 테두리 <span style="color:var(--mm-me)">금색 나</span> · <span style="color:var(--mm-ally)">파랑 아군</span> · <span style="color:var(--mm-enemy)">빨강 상대</span></figcaption>
     <ul class="lanes">${lane("top", "탑")}${lane("mid", "미드")}${lane("bot", "봇")}</ul>
   </figure>`;
 }

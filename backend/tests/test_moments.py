@@ -64,3 +64,30 @@ def test_last_seen_uses_only_past_exact_events():
     s = last_seen(md, 7, 180_000)
     assert (s["t"], s["x"], s["ago"]) == (150, 5000, 30)   # 판단 시점 뒤 사건은 쓰지 않는다
     assert last_seen(md, 9, 180_000) is None
+
+
+def test_story_and_after_follow_time():
+    from types import SimpleNamespace
+
+    from loldosa.analysis.turns import ShopVisit
+    from loldosa.review.moments import _merged, after, story
+
+    parts = {1: {"team": 100, "position": "JUNGLE", "champion_id": 0, "puuid": "me"},
+             6: {"team": 200, "position": "JUNGLE", "champion_id": 0, "puuid": "x"}}
+    frames = {(q, m): {"x": 3000 + m * 100, "y": 7000, "level": 3, "gold": 0, "jcs": m * 8, "cur": 0, "hp": 1, "hp_max": 1}
+              for q in (1, 6) for m in range(0, 8)}
+    ev = [{"ts_ms": 4 * 60_000 + 52_000, "type": "CHAMPION_KILL", "participant_id": 1, "victim_id": 6, "assists": [],
+           "team_id": None, "monster_type": None, "x": 9000, "y": 9000},
+          *[{"ts_ms": 6 * 60_000 + i * 6000, "type": "ELITE_MONSTER_KILL", "participant_id": 6, "victim_id": None, "assists": [],
+             "team_id": 200, "monster_type": "HORDE", "x": 5000, "y": 10000} for i in range(3)]]
+    md = SimpleNamespace(parts=parts, frames=frames, events=ev)
+    champs = SimpleNamespace(get=lambda _c: None)
+    visits = [ShopVisit(1, 3 * 60_000 + 34_000, False)]
+    st = story(md, champs, 1, 6, 100, 5, visits)
+    assert st["head"].startswith("3:34에 귀환했다가") and "16개" in st["head"]
+    assert [round(i["t"]) for i in st["items"]] == sorted(round(i["t"]) for i in st["items"])
+    steps = after(md, champs, 1, 6, 100, 5, visits)
+    texts = [s["text"] for s in steps]
+    assert texts[0] == "이 순간 실제 위치예요" and texts[-1] == "2분 뒤 위치예요"
+    assert any("공허 유충 3마리" in t for t in texts)
+    assert len(_merged(ev)) == 2
