@@ -58,6 +58,41 @@ def build_review_prompt(review: dict) -> str:
     return "아래 경기 리뷰 데이터만 근거로 복기 코칭을 해줘.\n" + json.dumps(payload, ensure_ascii=False, default=str)
 
 
+WEEKLY_SYSTEM = """너는 한국 롤 정글 코치다. 플레이어의 최근 경기 진단 데이터로 '이번 주 연습 계획'을 짠다.
+규칙:
+1. 데이터에 있는 것만 말한다. 모든 point 의 evidence 에는 EVIDENCE 의 id 를 하나 이상 넣는다.
+2. 숫자는 데이터에 있는 그대로 쓴다. 지어내지 않는다.
+3. lever 가 false 인 지표는 '원인'이라고 말하지 말고 습관 표시로만 다룬다.
+4. 한 주에 고칠 것은 하나만 고른다. 나머지는 유지하거나 나중으로 미룬다.
+5. 문장은 짧은 해요체로 쓴다. '~합니다', '~입니다'는 쓰지 않는다.
+6. 출력은 JSON 하나만.
+형식: {"headline": "이번 주 한 줄 요약", "points": [{"phase": "좋아진 점|이번 주 고칠 것|다짐|유지할 것", "text": "...", "evidence": ["G1"]}]}
+points 는 3~5개."""
+
+
+def weekly_evidence(gap: dict, skills: list[dict], decisions: dict) -> list[dict]:
+    """주간 리포트 근거: 차이 지표(G), 채점 체크(S), 판단 훈련(D)."""
+    ev = []
+    for i, x in enumerate((gap.get("gaps") or []) + (gap.get("strengths") or []), 1):
+        ev.append({"id": f"G{i}", "text": f"{x['label']}: 내 중앙값 {x['mine_text']}"
+                   + (f" (이전 {x['before_text']})" if x.get("before_text") else "")
+                   + f", 플래티넘 {x['platinum_text']}, 챌린저 {x['target_text']}",
+                   "games": x.get("games"), "lever": x.get("lever"), "if_then": x.get("if_then")})
+    for i, s in enumerate([s for s in skills if s.get("total")], 1):
+        ev.append({"id": f"S{i}", "text": f"{s['title']}: 최근 {s['total']}판 중 {s['pass']}번 지킴", "games": s["total"]})
+    if decisions.get("total"):
+        ev.append({"id": "D1", "text": f"판단 훈련: {decisions['total']}문제 중 {decisions['good']}개가 고수와 같은 선택"
+                   + (f", 상대 정글 추적 {decisions['track_total']}문제 중 {decisions['track_ok']}개 맞힘" if decisions.get("track_total") else ""),
+                   "games": decisions["total"]})
+    return ev
+
+
+def build_weekly_prompt(gap: dict, evidence: list[dict]) -> str:
+    payload = {"games": gap.get("games"), "progress_before": gap.get("progress_before"),
+               "progress_now": gap.get("progress_now"), "EVIDENCE": evidence}
+    return "아래 데이터만 근거로 이번 주 연습 계획을 짜줘.\n" + json.dumps(payload, ensure_ascii=False, default=str)
+
+
 def build_prompt(briefing: dict) -> str:
     cards = [{"title": c["title"], "headline": c["headline"],
               "items": [{"text": i["text"], "kind": i["kind"], "evidence": i["evidence"]} for i in c["items"]]}
@@ -191,6 +226,17 @@ class ClaudeCoach:
         try:
             text = await self.run_cli(build_review_prompt(review), system=REVIEW_SYSTEM)
             return {"status": "ok", **parse_and_validate(text, valid)}
+        except asyncio.TimeoutError:
+            return {"status": "error", "message": f"Claude 응답 시간 초과({self.timeout:.0f}초)"}
+        except Exception as e:  # noqa: BLE001
+            return {"status": "error", "message": str(e)}
+
+    async def weekly(self, gap: dict, evidence: list[dict]) -> dict:
+        if not self.enabled:
+            return {"status": "disabled", "message": "Claude가 설치돼 있지 않아요. 설정에서 'Claude 설치하기'를 눌러 주세요."}
+        try:
+            text = await self.run_cli(build_weekly_prompt(gap, evidence), system=WEEKLY_SYSTEM)
+            return {"status": "ok", **parse_and_validate(text, {e["id"] for e in evidence}), "evidence": evidence}
         except asyncio.TimeoutError:
             return {"status": "error", "message": f"Claude 응답 시간 초과({self.timeout:.0f}초)"}
         except Exception as e:  # noqa: BLE001

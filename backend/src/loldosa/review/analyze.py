@@ -61,6 +61,9 @@ class Lesson:
     evidence: list[str] = field(default_factory=list)
     concepts: list[str] = field(default_factory=list)  # 학습 탭 개념 id
     t: float | None = None  # 경기 시각(초) — 리플레이 이동용
+    impact: float | None = None  # 그 사건 뒤 2분 동안 우리 팀이 잃은(-)·얻은(+) 골드 + 오브젝트 (교훈 우선순위)
+    impact_say: str = ""
+    look: str = ""  # 리플레이에서 확인할 것 (관찰 질문)
 
 
 @dataclass
@@ -171,12 +174,15 @@ class Reviewer:
         else:
             rv.notes.append("고티어 통계가 없어요. `loldosa update` 후 다시 보세요.")
         rv.evidence = self.ev.items
-        rv.lessons.sort(key=lambda l: -l.severity)
         for l in rv.lessons + rv.strengths:
             l.concepts = lesson_concepts(l.title)
             m = re.match(r"(\d+):(\d{2})", l.title)
             if m:
                 l.t = int(m.group(1)) * 60 + int(m.group(2))
+            l.look = look_question(l.title)
+        # 교훈 우선순위: 심각도 다음으로 '그 일 뒤 2분 동안 실제로 잃은 것'이 큰 순서 (규칙만으로 고르면 뻔한 교훈이 1순위가 되기 쉬움)
+        self._impact(rv.lessons, frames, parts, events, me["team_id"])
+        rv.lessons.sort(key=lambda l: (-l.severity, l.impact if l.impact is not None else 0))
         if rv.is_jungle:
             from ..analysis.gap import game_gap, jungler_features, load_reference
             from ..learn.skills import evaluate
@@ -193,6 +199,32 @@ class Reviewer:
         return rv
 
     # ------------------------------------------------------------------ helpers
+
+    def _impact(self, lessons: list, frames: dict, parts: list, events: list, team: int) -> None:
+        """사건 시각 t 부터 2분 뒤까지 팀 골드 차 변화 + 오브젝트(±400). 음수 = 손해."""
+        from ..analysis.items import gold_as_items
+
+        allies = [p["participant_id"] for p in parts if p["team_id"] == team]
+        enemies = [p["participant_id"] for p in parts if p["team_id"] != team]
+
+        def diff(m):
+            if not all(m in frames.get(q, {}) for q in allies + enemies):
+                return None
+            return sum(frames[q][m]["gold"] or 0 for q in allies) - sum(frames[q][m]["gold"] or 0 for q in enemies)
+
+        for l in lessons:
+            if l.t is None:
+                continue
+            m0 = int(l.t // 60)
+            a, b = diff(m0), diff(m0 + 2)
+            if a is None or b is None:
+                continue
+            obj = sum((400 if e["team_id"] == team else -400) for e in events
+                      if e["type"] == "ELITE_MONSTER_KILL" and l.t * 1000 < e["ts_ms"] <= (l.t + 120) * 1000)
+            l.impact = (b - a) + obj
+            it = gold_as_items(l.impact)
+            l.impact_say = ("그 뒤 2분 동안 큰 차이는 없었어요" if not it["count"]
+                            else f"그 뒤 2분 동안 우리 팀이 {it['text']} {'잃었어요' if l.impact < 0 else '벌었어요'}")
 
     def mine(self, text: str) -> str:
         return self.ev.add(text, SRC_MINE)
@@ -628,6 +660,26 @@ LESSON_CONCEPTS = [
     ("정글 골드", ["ganking", "clear-efficiency"]),
     ("획득", ["objective-setup"]),
 ]
+
+
+LOOK = [  # 리플레이에서 무엇을 볼지: 그냥 보면 무엇을 봐야 할지 몰라서
+    ("죽었어요", "죽기 10초 전 미니맵에 상대가 보였는지, 내가 그쪽을 봤는지 확인해 보세요"),
+    ("갱을 당했어요", "갱이 오기 전에 상대 정글이 마지막으로 보인 곳과, 그때 내가 어디서 뭘 하고 있었는지 확인해 보세요"),
+    ("골드를 들고", "죽기 전에 귀환할 수 있는 틈(라인이 밀렸거나 캠프를 다 먹은 때)이 있었는지 찾아보세요"),
+    ("직전에 귀환", "오브젝트가 나오기 1~2분 전에 무엇을 하고 있었는지, 그때 귀환할 수 있었는지 확인해 보세요"),
+    ("합류 못 하고", "오브젝트 싸움이 시작될 때 내가 어디 있었는지, 언제 출발했어야 했는지 확인해 보세요"),
+    ("레벨이 불리", "싸움 전에 상대 정글과 내 레벨·체력을 비교할 수 있었는지 확인해 보세요"),
+    ("정글링", "첫 정글링에서 캠프 사이를 이동할 때 멈추거나 돌아간 순간이 있는지 확인해 보세요"),
+]
+
+
+def lesson_rule(title: str) -> str:
+    """교훈이 어떤 규칙에서 나왔는지 (피드백을 규칙별로 모으려고)."""
+    return next((k for k, _ in LESSON_CONCEPTS if k in title), "기타")
+
+
+def look_question(title: str) -> str:
+    return next((q for k, q in LOOK if k in title), "")
 
 
 def lesson_concepts(title: str) -> list[str]:

@@ -294,6 +294,32 @@ def fmt_value(f: Feature, v: float | None) -> str:
     return text + ("" if f.unit in ("%", "") else f.unit)
 
 
+def _if_then(concept: str) -> str | None:
+    from ..learn.skills import IF_THEN
+
+    return IF_THEN.get(concept)
+
+
+# 프로 리플레이를 '그냥 보기'는 남는 게 적어서, 지표마다 볼 것 하나를 정해 준다 (능동 관찰).
+WATCH = {
+    "clear-efficiency": "다음 3분 동안 캠프 사이를 움직이는 길과, 쉬는 틈이 있는지 세어 보세요.",
+    "power-spikes": "6레벨이나 첫 아이템이 나온 직후 어디로 가는지 보세요.",
+    "invading": "상대 정글 캠프에 들어가기 전에 누가 어디에 있었는지 확인해 보세요.",
+    "scuttle-crab": "바위게가 나오기 30초 전부터 어느 쪽으로 움직이는지 보세요.",
+    "cross-map": "반대편에서 싸움이 났을 때 몇 초 만에 합류하는지 세어 보세요.",
+    "ganking": "갱 가기 직전 상대 라이너의 체력과 스펠을 같이 보세요.",
+    "jungle-tracking": "상대 정글이 마지막으로 보인 곳과 그다음 움직임을 따라가 보세요.",
+    "vision-control": "와드를 어디에, 몇 분에 박는지 하나씩 적어 보세요.",
+    "sweeping": "렌즈를 언제 켜고 어디를 지우는지 보세요.",
+    "recall-timing": "귀환하기 직전에 들고 있던 골드와 라인 상태를 보세요.",
+    "objective-setup": "오브젝트가 나오기 1분 전부터 무엇을 준비하는지 보세요.",
+    "turret-plates": "포탑 방패를 먹으러 가는 타이밍과 라이너 위치를 보세요.",
+    "level-race": "6레벨까지 어떤 순서로 캠프를 먹는지 보세요.",
+    "skirmish-teamfight": "싸움이 시작될 때 어디에 서 있는지 보세요.",
+    "communication-pings": "다음 30초 동안 핑을 언제, 어디에 찍는지 세어 보세요.",
+}
+
+
 def personal_gap(rows: list[dict], ref: dict, target: str = "challenger", limit: int = 3) -> dict:
     """내 최근 경기 지표 중앙값을 플래티넘·고수 분포와 비교해, 챌린저까지 가장 큰 차이를 순서대로.
 
@@ -313,15 +339,21 @@ def personal_gap(rows: list[dict], ref: dict, target: str = "challenger", limit:
         if not tgt or not base:
             continue
         span = abs(tgt["median"] - base["median"]) or 1e-9
+        # 지렛대 여부: 같은 플레이어 안에서 이 지표가 좋았던 판에 더 이겼나 (scripts/within_player.py)
+        wd = (r.get("within") or {}).get("win_diff")
+        lever = 1.0 if wd is None or wd >= 0.05 else 0.35  # 이어지지 않으면 1순위에서 뒤로 (습관 표시로만)
         sign = 1 if r["higher_better"] else -1
         short = (tgt["median"] - mine) * sign / span  # 1 = 플래티넘 수준만큼 모자람, 0 이하 = 목표 도달
         items.append({
-            "key": key, "label": f.label, "concept": f.concept, "drill": f.drill,
+            "key": key, "label": f.label, "concept": f.concept, "drill": f.drill, "if_then": _if_then(f.concept), "watch": WATCH.get(f.concept),
             "mine": round(mine, 3), "mine_text": fmt_value(f, mine), "games": len(vals),
             "target": tgt["median"], "target_text": fmt_value(f, tgt["median"]),
             "platinum_text": fmt_value(f, base["median"]),
             "groups_text": {k: fmt_value(f, v["median"]) for k, v in g.items()},
-            "auc": r["auc"], "short": round(short, 2), "priority": round(max(short, 0) * (r["auc"] - 0.5), 4),
+            "auc": r["auc"], "short": round(short, 2), "priority": round(max(short, 0) * (r["auc"] - 0.5) * lever, 4),
+            "within": r.get("within"), "lever": lever == 1.0,
+            # 내 값의 흔들림: 판이 적으면 범위를 같이 보여 준다 (하위 25%~상위 25%)
+            "range_text": f"{fmt_value(f, _q(vals, 0.25))}~{fmt_value(f, _q(vals, 0.75))}" if len(vals) >= 4 else None,
             "examples": [{**e, "value_text": fmt_value(f, e["value"])} for e in (ref.get("exemplars", {}).get(key) or [])[:3]],
             # 한 번에 챌린저까지는 무리라서, 남은 거리의 1/3씩 끊어서 '이번 주 목표'로
             "step_text": fmt_value(f, mine + (tgt["median"] - mine) / 3),

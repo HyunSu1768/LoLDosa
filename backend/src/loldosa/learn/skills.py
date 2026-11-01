@@ -92,6 +92,22 @@ def _power(f):
         "레벨이 불리할 때 정글 싸움에서 졌어요" if f.get("bad_band_fight") else "레벨이 불리할 때 정글 싸움에서 지지 않았어요")
 
 
+def _gold_spending(f):
+    """초 단위 기록: 15분까지 1,200골드 넘게 들고 살아 있던 시간 1분 이하면 통과 (행동 목표)."""
+    v = f.get("live_rich_s")
+    if v is None:
+        return "na", "게임 중 기록이 없어요 (앱을 켠 채로 게임하면 기록돼요)"
+    return ("pass" if v <= 60 else "fail"), f"1,200골드 넘게 들고 버틴 시간 {int(v) // 60}분 {int(v) % 60}초 (목표 1분 이하)"
+
+
+def _no_idle(f):
+    """초 단위 기록: 15분까지 CS·킬 관여가 1분 넘게 멈춘 구간이 1번 이하면 통과 (행동 목표)."""
+    v = f.get("live_idle_n")
+    if v is None:
+        return "na", "게임 중 기록이 없어요 (앱을 켠 채로 게임하면 기록돼요)"
+    return ("pass" if v <= 1 else "fail"), f"1분 넘게 멈춘 구간 {v}번 (목표 1번 이하)"
+
+
 CHECKS = {
     "full-clear": ("3:00까지 목표 캠프 수 먹기 (풀캠 챔피언 6캠프, 아니면 4캠프)", _full_clear),
     "clear-efficiency": ("10분 정글 CS 고티어 평균의 90% 이상", _clear_eff),
@@ -102,6 +118,24 @@ CHECKS = {
     "counter-gank": ("10분 전 상대 정글 갱에 아군 안 죽게 하기", _counter),
     "vision-control": ("분당 시야 점수 고티어 평균의 90% 이상", _vision),
     "power-spikes": ("레벨이 불리할 땐 정글 싸움 피하기", _power),
+    "gold-spending": ("15분까지 1,200골드 넘게 들고 버틴 시간 1분 이하", _gold_spending),
+    "no-idle": ("15분까지 CS·킬 관여가 1분 넘게 멈춘 구간 1번 이하", _no_idle),
+}
+
+# '만약 ~하면 ~해요' 다짐: 게임 전 브리핑에 이 문장이 그대로 나오고, 게임 뒤 같은 목표로 채점한다.
+# 알기만 하는 것과 실제로 하는 것 사이를 잇는 장치 (실행 의도, implementation intention).
+IF_THEN = {
+    "full-clear": "3:00 전에 목표 캠프를 다 못 먹었으면, 갱 가지 말고 남은 캠프부터 먹어요",
+    "clear-efficiency": "갱이나 싸움이 끝나면, 가장 가까운 캠프로 바로 가요",
+    "vision-control": "귀환할 때마다, 제어 와드를 하나 사서 다음 오브젝트 쪽에 박아요",
+    "recall-timing": "골드가 1,200을 넘었는데 싸움이 없으면, 다음 캠프만 먹고 바로 귀환해요",
+    "communication-pings": "상대 정글이 안 보이면, 그 쪽 라이너에게 바로 미아 핑을 찍어요",
+    "cross-map": "반대편에서 싸움이 날 것 같으면, 그 쪽 캠프를 먹으며 미리 다가가요",
+    "level-race": "6레벨 전엔, 이길 확률이 낮은 갱보다 캠프를 먼저 먹어요",
+    "sweeping": "오브젝트 1분 전이 되면, 렌즈로 근처 와드를 먼저 지워요",
+    "jungle-tracking": "상대 정글을 마지막으로 본 곳이 1분 넘게 지났으면, 혼자 깊이 들어가지 않아요",
+    "gold-spending": "골드가 1,200을 넘으면, 싸움이 없을 때 바로 귀환해요",
+    "no-idle": "갱이 끝나면, 서 있지 말고 가장 가까운 캠프나 라인으로 가요",
 }
 
 
@@ -170,6 +204,9 @@ VALIDATION = {  # concept: (프로, 챌린저, 플래티넘 통과율, 채점 �
     "turn-tempo": (0.44, 0.41, 0.38, False),
     "counter-gank": (0.20, 0.23, 0.11, False),
     "power-spikes": (0.90, 0.97, 0.91, False),
+    # 행동 목표: 고수 비교 데이터는 없고(게임 중 기록은 내 PC 에서만) 내 기준으로 채점한다
+    "gold-spending": (None, None, None, True),
+    "no-idle": (None, None, None, True),
 }
 for _cid, _key in GAP_CHECKS.items():
     _r = (_gap_ref() or {}).get("features", {}).get(_key)

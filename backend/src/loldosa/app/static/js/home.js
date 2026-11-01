@@ -2,7 +2,7 @@
  * H1 숫자 하나 히어로 · H2 진행도는 플래티넘→챌린저 한 줄 · H3 제안은 하나 · H4 제안(떠 있는 층)과 기록(리스트) 분리
  * H5 장식 없이 글·버튼으로 위계 · H6 성공 = 다음 판에 지표가 바뀌었나(전·후 값 표시) */
 import { $, api, badge, champImg, champKey, champName, ensureChamps, ensureLearn, empty, esc, go, GROUP_KO, mmss, openReplay,
-  openSheet, put, row, skeleton, state, toast } from "./core.js";
+  openSheet, post, put, row, skeleton, state, toast } from "./core.js";
 import { startSync } from "./review.js";
 import { startSrs } from "./flows.js";
 
@@ -45,9 +45,9 @@ export async function renderHome(view) {
     ${top ? `<section class="card suggest" style="margin-top:32px" aria-label="이번 주에 고칠 것">
       <div class="eyebrow">이번 주엔 이것 하나만 고쳐 봐요</div>
       <div class="title" style="font-size:var(--t3);line-height:var(--t3-lh)">${esc(top.label)}</div>
-      <div class="body" style="margin-top:8px">지금 <b class="num">${esc(top.mine_text)}</b>, 챌린저는 <b class="num accent">${esc(top.target_text)}</b>예요.
+      <div class="body" style="margin-top:8px">지금 <b class="num">${esc(top.mine_text)}</b>${top.range_text ? ` <span class="sub">(판마다 ${esc(top.range_text)})</span>` : ""}, 챌린저는 <b class="num accent">${esc(top.target_text)}</b>예요.
         이번 주는 <b class="num">${esc(top.step_text)}</b>까지만 가 봐요.</div>
-      <div class="body" style="margin-top:12px;color:var(--grey900)">다음 판에서: ${esc(top.drill)}</div>
+      <div class="body" style="margin-top:12px;color:var(--grey900)">다음 판 다짐: 만약 ${esc(top.if_then || top.drill)}</div>
       <div class="btn-row">
         ${top.examples && top.examples.length ? `<button class="btn fill" id="watch">${esc(top.examples[0].player)}가 하는 거 보기</button>` : ""}
         <button class="btn weak" id="why">왜 이게 1순위예요?</button>
@@ -66,6 +66,7 @@ export async function renderHome(view) {
         sub: `${m.kills}/${m.deaths}/${m.assists} · ${fmtDate(m.game_start)}`,
         end: m.focus_status === "pass" ? badge("목표 달성", "green") : m.focus_status === "fail" ? badge("목표 미달", "red") : "",
         href: `#/review/${m.match_id}` })).join("")}
+      ${h.ai_ready ? row({ lead: "🧭", title: "이번 주 AI 리포트", sub: "진단·체크·판단 훈련 기록으로 이번 주 연습 계획을 짜 드려요", attrs: 'data-act="weekly"' }) : ""}
       ${row({ lead: "＋", title: "새 경기 불러오기", sub: "방금 한 판은 게임이 끝나면 자동으로 들어와요", attrs: 'data-act="sync"' })}
     </div>
 
@@ -75,7 +76,7 @@ export async function renderHome(view) {
       <p class="sub" style="margin-top:8px">점수가 높은 챔피언일수록 고수처럼 플레이하고 있어요. 랭크에선 이 챔피언을 먼저 골라 보세요.</p>` : ""}`;
   view.replaceChildren(page);
 
-  $("#watch", page)?.addEventListener("click", () => openReplay(top.examples[0].match_id, Math.round(top.examples[0].t)));
+  $("#watch", page)?.addEventListener("click", () => openReplay(top.examples[0].match_id, Math.round(top.examples[0].t), top.watch));
   $("#why", page)?.addEventListener("click", () => gapSheet(g, top));
   page.addEventListener("click", async (e) => {
     const a = e.target.closest("[data-act]")?.dataset.act;
@@ -83,7 +84,27 @@ export async function renderHome(view) {
     if (a === "focus") focusSheet(focus);
     if (a === "pick") pickFocusSheet(() => renderHome(view));
     if (a === "sync") startSync({ onDone: () => renderHome(view) });
+    if (a === "weekly") weeklySheet();
   });
+}
+
+/** 주간 리포트: Claude 가 근거 id 를 붙인 문장만 보여 준다 (근거 없는 문장은 서버에서 버림) */
+async function weeklySheet() {
+  const sh = openSheet(`<h2>이번 주 계획을 짜는 중이에요</h2><p class="body">Claude가 최근 기록을 읽고 있어요. 30초쯤 걸려요.</p>${skeleton(2)}`);
+  let r;
+  try { r = await post("/api/coach/weekly"); } catch (e) { r = { status: "error", message: e.message }; }
+  if (r.status !== "ok") {
+    sh.innerHTML = `<button class="close" aria-label="닫기" data-close>✕</button><h2>리포트를 만들지 못했어요</h2>
+      <p class="body">${esc(r.message || "")}</p><div class="btn-row end"><button class="btn grey m" data-close>닫기</button></div>`;
+    return;
+  }
+  const ev = Object.fromEntries((r.evidence || []).map((e) => [e.id, e]));
+  sh.innerHTML = `<button class="close" aria-label="닫기" data-close>✕</button><div class="eyebrow">이번 주 AI 리포트</div>
+    <h2>${esc(r.headline || "이번 주 계획")}</h2>
+    <div class="list" style="margin-top:16px">${r.points.map((p) => row({ title: esc(p.phase), sub: esc(p.text) })).join("")}</div>
+    <details style="margin-top:16px"><summary class="sub">근거로 쓴 기록 보기</summary>
+      <ul class="plain">${[...new Set(r.points.flatMap((p) => p.evidence))].map((id) => `<li class="sub">${esc(ev[id]?.text || id)}</li>`).join("")}</ul></details>
+    <div class="btn-row end"><button class="btn grey m" data-close>닫기</button></div>`;
 }
 
 const fmtDate = (s) => { const d = new Date(String(s).replace(" ", "T")); return isNaN(d) ? "" : `${d.getMonth() + 1}월 ${d.getDate()}일 ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
@@ -96,17 +117,22 @@ function gapSheet(g, top) {
   const sh = openSheet(`<h2>${esc(top.label)}</h2>
     <p class="body">고수(프로·챌린저·마스터+)와 플래티넘 경기를 비교했을 때 이 지표가 실력을 크게 갈랐고, 지금 내가 챌린저와 가장 멀리 떨어져 있어요.
       이긴 판끼리, 진 판끼리 따로 봐도 차이가 남은 지표만 골랐어요.</p>
-    <div class="list" style="margin-top:16px">${row({ title: "나", end: `<div class="val num accent">${esc(top.mine_text)}</div>` })}${ladder(top)}</div>
+    <div class="list" style="margin-top:16px">${row({ title: "나", sub: top.range_text ? `판마다 ${esc(top.range_text)} · 최근 ${top.games}판 중앙값` : `최근 ${top.games}판 중앙값`, end: `<div class="val num accent">${esc(top.mine_text)}</div>` })}${ladder(top)}</div>
+    ${top.within ? `<div class="card" style="margin-top:12px;background:var(--bg-layer)"><div class="eyebrow">같은 사람 안에서 비교하면</div>
+      <p class="body" style="margin:4px 0 0">${top.lever
+        ? `플레이어 ${top.within.players}명의 ${top.within.games}판에서, 이 지표가 자기 평소보다 좋았던 판의 승률이 <b>${Math.round(top.within.win_diff * 100)}%p</b> 높았어요.`
+        : `플레이어 ${top.within.players}명의 판을 비교하면, 이 지표가 좋았던 판에 더 이기지는 않았어요. 고수의 습관을 보여 주는 표시라서 우선순위를 낮췄어요.`}</p>
+      <p class="sub" style="margin:6px 0 0">이기는 판이라 지표가 좋아졌을 수도 있어서, 원인이라고 단정하지는 않아요.</p></div>` : ""}
     ${top.concept === "communication-pings" ? `<p class="sub" style="margin-top:12px">핑 숫자 자체가 목표는 아니에요. 핑을 치려면 미니맵을 보고 있어야 해서, 맵을 보는 습관이 숫자로 드러나는 거예요.</p>` : ""}
     ${top.examples && top.examples.length > 1 ? `<h2 class="section" style="margin-top:28px">프로가 하는 거 보기<small>같은 패치 리플레이</small></h2>
-      <div class="list">${top.examples.map((e, i) => row({ lead: "▶", title: `${esc(e.player)} · ${esc(e.champion)}`, sub: `이 판 ${esc(e.value_text)}`, attrs: `data-ex="${i}"` })).join("")}</div>` : ""}
+      ${top.watch ? `<p class="sub" style="margin:0 0 8px">보면서 할 일: ${esc(top.watch)}</p>` : ""}<div class="list">${top.examples.map((e, i) => row({ lead: "▶", title: `${esc(e.player)} · ${esc(e.champion)}`, sub: `이 판 ${esc(e.value_text)}`, attrs: `data-ex="${i}"` })).join("")}</div>` : ""}
     ${g.gaps.length > 1 ? `<h2 class="section" style="margin-top:28px">그다음 후보</h2><div class="list">${g.gaps.slice(1).map((x) =>
       row({ title: esc(x.label), sub: `나 ${esc(x.mine_text)} · 챌린저 ${esc(x.target_text)}` })).join("")}</div>` : ""}
     <div class="btn-row end"><button class="btn grey m" data-close>닫기</button>
       ${state.home?.skills?.some((s) => s.id === top.concept) ? `<button class="btn fill m" id="set">연습 목표로 정하기</button>` : ""}</div>`);
   sh.addEventListener("click", (e) => {
     const i = e.target.closest("[data-ex]")?.dataset.ex;
-    if (i != null) openReplay(top.examples[+i].match_id, Math.round(top.examples[+i].t));
+    if (i != null) openReplay(top.examples[+i].match_id, Math.round(top.examples[+i].t), top.watch);
   });
   $("#set", sh)?.addEventListener("click", async () => { await put("/api/focus", { concept: top.concept }); toast("연습 목표로 정했어요"); go("#/home"); });
 }

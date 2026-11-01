@@ -38,3 +38,24 @@ def test_champion_offset():
     ref = {"champ_offset": {"jcs10": {"64": 3.0}}}
     assert champ_adjust({"jcs10": 70, "champion_id": 64}, "jcs10", ref) == 67
     assert champ_adjust({"jcs10": 70, "champion_id": 1}, "jcs10", ref) == 70
+
+
+def test_non_lever_feature_is_deprioritized():
+    groups = {"apex": rows(200, 72, 8, 0.5, seed=1), "challenger": rows(80, 74, 8, 0.6, seed=3),
+              "platinum": rows(120, 62, 1, 0.5, seed=2)}
+    ref = build_reference(groups, ("challenger", "apex"), "platinum")
+    me = rows(10, 60, 1, 0.5, seed=4)  # 둘 다 모자람
+    first = personal_gap(me, ref)["gaps"][0]["key"]
+    other = "jcs10" if first == "missing_pings" else "missing_pings"
+    ref["features"][first]["within"] = {"players": 50, "games": 500, "win_diff": -0.04}  # 같은 사람 안에선 효과 없음
+    ref["features"][other]["within"] = {"players": 50, "games": 500, "win_diff": 0.15}
+    g = personal_gap(me, ref)
+    assert g["gaps"][0]["key"] == other and g["gaps"][0]["lever"] is True
+
+
+def test_gap_items_carry_watch_task():
+    groups = {"apex": rows(200, 72, 8, 0.5, seed=1), "challenger": rows(80, 74, 8, 0.6, seed=3),
+              "platinum": rows(120, 62, 1, 0.5, seed=2)}
+    ref = build_reference(groups, ("challenger", "apex"), "platinum")
+    g = personal_gap(rows(10, 60, 1, 0.5, seed=4), ref)
+    assert all(x["watch"] for x in g["gaps"])

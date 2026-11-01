@@ -87,10 +87,14 @@ export async function renderReview(view, id) {
       <div class="eyebrow">${feel} 이 판에서 하나만 배운다면</div>
       ${kl ? `<div class="brief-hero">${esc(kl.lesson.title)}</div>
         <p class="body" style="margin-top:12px">${linkify(kl.lesson.text)}${evChips(kl.lesson.evidence, pool)}</p>
+        ${kl.lesson.impact_say ? `<p class="sub">${esc(kl.lesson.impact_say)}</p>` : ""}
+        ${kl.lesson.look && kl.lesson.t != null ? `<div class="look"><b>리플레이에서 확인할 것</b> ${esc(kl.lesson.look)}</div>` : ""}
         <div class="btn-row">
           ${kl.lesson.t != null ? `<button class="btn fill" id="replay">이 장면 리플레이로 보기</button>` : ""}
           <a class="btn weak" href="#/learn/${kl.concept.id}">${esc(kl.concept.title)} 배우기</a>
-        </div>` : `<div class="brief-hero">${rv.is_jungle ? "눈에 띄는 큰 실수가 없었어요" : "정글로 뛴 판이 아니라 간단히만 볼게요"}</div>`}
+        </div>
+        <div class="fb" id="fb"><span class="sub">이 교훈이 이 판에 맞나요?</span>
+          <button class="btn grey s" data-fb="1">맞아요</button><button class="btn grey s" data-fb="0">아니에요</button></div>` : `<div class="brief-hero">${rv.is_jungle ? "눈에 띄는 큰 실수가 없었어요" : "정글로 뛴 판이 아니라 간단히만 볼게요"}</div>`}
     </section>
 
     <div id="moments"></div>
@@ -117,6 +121,10 @@ export async function renderReview(view, id) {
   </div>`;
 
   $("#replay", view)?.addEventListener("click", () => openReplay(id, kl.lesson.t));
+  $$("[data-fb]", view).forEach((b) => (b.onclick = async () => {
+    await post("/api/lesson/feedback", { match_id: id, rule: kl.rule, ok: b.dataset.fb === "1" }).catch(() => {});
+    $("#fb", view).innerHTML = `<span class="sub">${b.dataset.fb === "1" ? "고마워요. 이런 교훈을 계속 앞에 보여 드릴게요." : "알려 줘서 고마워요. 이 규칙이 자꾸 틀리면 핵심 교훈에서 뒤로 미룰게요."}</span>`;
+  }));
   $("#more", view).onclick = () => moreSheet(rv, pool, graded);
   $("#ai", view).onclick = () => aiSheet(id, pool);
   loadMoments(id, $("#moments", view));
@@ -158,17 +166,32 @@ async function loadMoments(matchId, box) {
   let i = 0;
   const draw = () => {
     const mo = list[i];
+    const tr = mo.snapshot.track;
+    box.dataset.done = "";
     box.innerHTML = `<h2 class="section">그 순간, 고수라면?<small>${i + 1} / ${list.length}</small></h2>
       <section class="card moment">
         <div class="eyebrow num">${mo.minute}:00 · ${esc(mo.reason)}</div>
-        <div class="mo-grid">${board(mo.snapshot)}
+        <div class="mo-grid"><div class="mo-map">${board(mo.snapshot)}</div>
           <div><ul class="plain">${mo.snapshot.facts.filter((f) => !f.startsWith("라인:")).map((f) => `<li>${linkify(f)}</li>`).join("")}</ul>
-            <div class="title" style="margin:16px 0 8px">여기서 뭐 할래요?</div>
-            <div class="choices">${mo.choices.map((c) => `<button class="choice" data-a="${c.action}">${esc(c.label)}</button>`).join("")}</div>
-            <div class="reveal"></div></div></div>
+            ${tr ? `<div class="q-step" id="q-track"><div class="title" style="margin:16px 0 8px">1. ${esc(tr.q)}</div>
+              <div class="choices">${tr.choices.map((c) => `<button class="choice" data-t="${c.id}">${esc(c.label)}</button>`).join("")}</div>
+              <div class="t-reveal"></div></div>` : ""}
+            <div class="q-step ${tr ? "locked" : ""}" id="q-act"><div class="title" style="margin:16px 0 8px">${tr ? "2. " : ""}여기서 뭐 할래요?</div>
+              <div class="choices">${mo.choices.map((c) => `<button class="choice" data-a="${c.action}" ${tr ? "disabled" : ""}>${esc(c.label)}</button>`).join("")}</div>
+              <div class="reveal"></div></div></div></div>
       </section>
       <div class="btn-row end">${i > 0 ? `<button class="btn grey m" data-nav="-1">이전 장면</button>` : ""}${i < list.length - 1 ? `<button class="btn weak m" data-nav="1">다음 장면</button>` : ""}</div>`;
-    $$(".choice", box).forEach((b) => (b.onclick = () => reveal(matchId, mo, box, b.dataset.a)));
+    // 1단계: 상대 정글 위치 추적 (내가 볼 수 있었던 정보만으로) → 답하면 실제 위치 공개
+    $$("[data-t]", box).forEach((b) => (b.onclick = () => {
+      const ok = b.dataset.t === tr.answer;
+      mo._trackOk = ok;
+      $$("[data-t]", box).forEach((x) => { x.disabled = true; if (x.dataset.t === tr.answer) x.classList.add("right"); else if (x === b) x.classList.add("wrong"); });
+      $(".t-reveal", box).innerHTML = `<div class="verdict ${ok ? "good" : "bad"}">${ok ? "맞혔어요" : "아쉬워요"}</div><p class="sub">${esc(tr.truth)}. 지도에 실제 위치를 표시했어요.</p>`;
+      $(".mo-map", box).innerHTML = board(mo.snapshot, 380, true);
+      $("#q-act", box).classList.remove("locked");
+      $$("#q-act .choice", box).forEach((x) => (x.disabled = false));
+    }));
+    $$("[data-a]", box).forEach((b) => (b.onclick = () => reveal(matchId, mo, box, b.dataset.a)));
     $$("[data-nav]", box).forEach((b) => (b.onclick = () => { i += +b.dataset.nav; draw(); }));
   };
   draw();
@@ -178,33 +201,33 @@ function reveal(matchId, mo, box, choice) {
   if (box.dataset.done === `${mo.minute}`) return;
   box.dataset.done = `${mo.minute}`;
   const good = mo.good.includes(choice);
-  $$(".choice", box).forEach((b) => {
+  $$("[data-a]", box).forEach((b) => {
     if (mo.good.includes(b.dataset.a)) b.classList.add("right");
     else if (b.dataset.a === choice) b.classList.add("wrong");
     b.disabled = true;
   });
   const bars = mo.crowd.slice(0, 5).map((c) => `<div class="crowd ${c.action === choice ? "picked" : ""}">
-      <span>${esc(c.label)}</span><span class="bar"><i style="width:${Math.round(c.share * 100)}%"></i></span><span class="num">${Math.round(c.share * 100)}%</span>
-      <span class="sub">${esc(c.swing_say || "")}</span></div>`).join("");
-  $(".reveal", box).innerHTML = `<div class="verdict ${good ? "good" : "bad"}">${good ? "좋은 선택이에요" : "고수는 다르게 많이 골랐어요"}</div>
+      <span>${esc(c.label)} ${c.best ? '<span class="badge green">결과 1위</span>' : ""}</span><span class="bar"><i style="width:${Math.round(c.share * 100)}%"></i></span><span class="num">${Math.round(c.share * 100)}%</span>
+      <span class="sub">${c.score == null ? "고른 사람이 적어서 판정하지 않았어요" : esc(c.swing_say || "")}${c.died >= 0.3 ? ` · ${Math.round(c.died * 100)}%가 죽었어요` : ""}</span></div>`).join("");
+  $(".reveal", box).innerHTML = `<div class="verdict ${good ? "good" : "bad"}">${good ? "고수도 많이 고른 선택이에요" : "고수는 다르게 많이 골랐어요"}</div>
     <p class="sub">${esc(mo.verdict)}</p>
-    <div class="sub" style="margin:12px 0 6px">비슷한 상황의 ${esc(mo.pool_label)} 정글러 ${mo.k}명이 한 것 · 2분 뒤 결과</div>${bars}
+    <div class="sub" style="margin:12px 0 6px">비슷한 상황의 ${esc(mo.pool_label)} 정글러 ${mo.k}명이 한 것 · 막대는 고른 비율, 아래는 2분 뒤 결과</div>${bars}
     <p class="sub" style="margin-top:8px">실제 내 선택: '${esc(mo.mine.label)}' · 2분 뒤 ${esc(mo.mine.swing_say || "")}${mo.mine.died ? " · 내가 죽었어요" : ""}</p>
     <div class="btn-row"><button class="btn weak s" id="mo-replay">이 장면 리플레이로 보기</button></div>`;
   $("#mo-replay", box).onclick = () => openReplay(matchId, mo.t);
-  post("/api/moments/answer", { match_id: matchId, minute: mo.minute, choice, good, concepts: mo.concepts.map((c) => c.id),
+  post("/api/moments/answer", { match_id: matchId, minute: mo.minute, choice, good, track_ok: mo._trackOk ?? null, concepts: mo.concepts.map((c) => c.id),
     moment: { match_id: matchId, minute: mo.minute, t: mo.t, reason: mo.reason, snapshot: mo.snapshot, choices: mo.choices,
       crowd: mo.crowd.slice(0, 6), good: mo.good, verdict: mo.verdict, mine: mo.mine, k: mo.k, pool_label: mo.pool_label, concepts: mo.concepts } }).catch(() => {});
 }
 
 /** 미니맵: 실제 롤 미니맵처럼 (지도 이미지 · 원형 초상화 · 아군 파랑/적 빨강/나 금색 테두리 · 방향도 게임과 같게).
  * 글자는 '나'와 '상대 정글'에만 단다 (나머지는 실제 미니맵처럼 얼굴로 알아보게). 라인 상황은 지도 밖에 아이템으로. */
-export function board(snap, size = 380) {
+export function board(snap, size = 380, reveal = false) {
   const M = 14870, S = size, R = Math.round(S * 0.042);  // 초상화 반지름
   const X = (x) => (x / M) * S, Y = (y) => S - (y / M) * S;
   const ver = state.ddragon;
   const mapUrl = ver ? `https://ddragon.leagueoflegends.com/cdn/${ver}/img/map/map11.png` : "";
-  const units = [...snap.units].sort((a, b) => (a.me ? 1 : a.enemy_jungler ? 0.5 : 0) - (b.me ? 1 : b.enemy_jungler ? 0.5 : 0));
+  const units = [...snap.units].filter((u) => reveal || !u.hidden).sort((a, b) => (a.me ? 1 : a.enemy_jungler ? 0.5 : 0) - (b.me ? 1 : b.enemy_jungler ? 0.5 : 0));
   const tok = units.map((u, i) => {
     const cx = X(u.x), cy = Y(u.y), big = u.me || u.enemy_jungler, r = big ? R + 3 : R;
     const ring = u.me ? "var(--mm-me)" : u.ally ? "var(--mm-ally)" : "var(--mm-enemy)";
@@ -217,6 +240,9 @@ export function board(snap, size = 380) {
         <text x="${cx}" y="${cy + r + 18}" text-anchor="middle">${tag}</text></g>` : ""}
       <title>${esc(u.name)}${u.hp != null ? ` · 체력 ${u.hp}%` : ""}</title></g>`;
   }).join("");
+  const ls = snap.last_seen;
+  const seenMark = ls && !reveal ? `<g class="mm-seen"><circle cx="${X(ls.x)}" cy="${Y(ls.y)}" r="${R + 3}"/><text x="${X(ls.x)}" y="${Y(ls.y) + 5}" text-anchor="middle">?</text>
+      <g class="mm-tag ejg"><rect x="${X(ls.x) - 62}" y="${Y(ls.y) + R + 6}" width="124" height="20" rx="10"/><text x="${X(ls.x)}" y="${Y(ls.y) + R + 20}" text-anchor="middle">상대 정글 ${mmss(ls.t)}에 봄</text></g></g>` : "";
   const objs = snap.objectives.map((o) => `<g class="mm-obj"><rect x="${X(o.x) - 46}" y="${Y(o.y) - 11}" width="92" height="22" rx="11"/>
     <text x="${X(o.x)}" y="${Y(o.y) + 5}" text-anchor="middle">${esc(o.name)} ${esc(o.text)}</text></g>`).join("");
   const li = snap.lane_items || {};
@@ -231,8 +257,8 @@ export function board(snap, size = 380) {
     <svg class="minimap" viewBox="0 0 ${S} ${S}" role="img" aria-label="${snap.minute}분 미니맵">
       ${mapUrl ? `<image href="${mapUrl}" width="${S}" height="${S}" preserveAspectRatio="none"/>` : `<rect width="${S}" height="${S}" fill="#0b1a14"/>`}
       <rect width="${S}" height="${S}" fill="none" stroke="#c8aa6e" stroke-width="3"/>
-      ${objs}${tok}</svg>
-    <figcaption class="sub">${snap.minute}:00 순간 위치 · 우리 팀은 ${snap.team === 100 ? "블루(왼쪽 아래)" : "레드(오른쪽 위)"} · 테두리 <span style="color:var(--mm-me)">금색 나</span> · <span style="color:var(--mm-ally)">파랑 아군</span> · <span style="color:var(--mm-enemy)">빨강 상대</span></figcaption>
+      ${objs}${seenMark}${tok}</svg>
+    <figcaption class="sub">${snap.minute}:00 순간 위치${reveal ? "" : " · 상대 정글은 마지막으로 본 곳(?)만"} · 우리 팀은 ${snap.team === 100 ? "블루(왼쪽 아래)" : "레드(오른쪽 위)"} · 테두리 <span style="color:var(--mm-me)">금색 나</span> · <span style="color:var(--mm-ally)">파랑 아군</span> · <span style="color:var(--mm-enemy)">빨강 상대</span></figcaption>
     <ul class="lanes">${lane("top", "탑")}${lane("mid", "미드")}${lane("bot", "봇")}</ul>
   </figure>`;
 }

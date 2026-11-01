@@ -61,7 +61,7 @@ export function onPostgame(msg) {
     box.innerHTML = `<div class="pg">${close}
       <div class="eyebrow">방금 판 · ${esc(msg.champion || "")} ${msg.win ? "승리" : "패배"}</div>
       <div class="title" style="font-size:var(--t5)">${msg.lesson?.title ? esc(msg.lesson.title) : "눈에 띄는 큰 실수는 없었어요"}</div>
-      ${msg.focus ? `<div class="sub" style="margin-top:6px">연습 목표 ${esc(msg.focus.title)} · ${msg.focus.status === "pass" ? "지켰어요" : "놓쳤어요"}</div>` : ""}
+      ${msg.focus ? `<div class="sub" style="margin-top:6px">${msg.focus.status === "pass" ? "✓ 다짐을 지켰어요" : "✗ 다짐을 놓쳤어요"} · ${esc(msg.focus.title)} · ${esc(msg.focus.value || "")}</div>` : ""}
       ${msg.gap ? `<div class="sub">챌린저와 차이: ${esc(msg.gap.label)} ${esc(msg.gap.mine_text)}</div>` : ""}
       <div class="btn-row"><button class="btn fill m" data-pg-open>복기 보기</button></div></div>`;
     try { if (window.Notification?.permission === "granted") new Notification("방금 판 복기가 준비됐어요", { body: msg.lesson?.title || "" }); } catch {}

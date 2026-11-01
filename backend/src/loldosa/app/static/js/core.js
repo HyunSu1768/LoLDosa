@@ -152,13 +152,15 @@ export const GROUP_KO = { pro: "프로", challenger: "챌린저", apex: "마스�
 export const POS_KO = { TOP: "탑", JUNGLE: "정글", MIDDLE: "미드", BOTTOM: "원딜", UTILITY: "서폿" };
 
 /* ---------- 리플레이 열기 (공통 흐름) ---------- */
-export async function openReplay(matchId, t) {
+/* 보기만 하면 남는 게 적어서(수동 시청), 볼 것 하나를 같이 준다 */
+const taskBox = (task) => (task ? `<div class="look" style="margin-top:16px"><div class="eyebrow">보면서 할 일</div><div class="body">${esc(task)}</div></div>` : "");
+export async function openReplay(matchId, t, task = "") {
   const sh = openSheet(`<h2>리플레이를 여는 중이에요</h2><p class="body">롤 클라이언트에서 ${mmss(t)} 조금 앞으로 이동해요. 길면 1~2분 걸려요.</p>
-    <div class="sk line" style="width:70%;margin-top:20px"></div>`);
+    ${taskBox(task)}<div class="sk line" style="width:70%;margin-top:20px"></div>`);
   try {
     const r = await post(`/api/replay/${matchId}`, { t });
     sh.innerHTML = `<button class="close" aria-label="닫기" data-close>✕</button>
-      <h2>${r.status === "ok" ? "리플레이를 열었어요" : "리플레이를 열지 못했어요"}</h2><p class="body">${esc(r.message || "")}</p>
+      <h2>${r.status === "ok" ? "리플레이를 열었어요" : "리플레이를 열지 못했어요"}</h2><p class="body">${esc(r.message || "")}</p>${r.status === "ok" ? taskBox(task) : ""}
       <div class="btn-row end"><button class="btn m grey" data-close>닫기</button></div>`;
   } catch (e) {
     sh.innerHTML = `<button class="close" aria-label="닫기" data-close>✕</button><h2>리플레이를 열지 못했어요</h2>

@@ -4,10 +4,16 @@ import { $, $$, api, badge, empty, ensureLearn, esc, go, linkify, openSheet, pos
 
 export async function renderLearn(view) {
   view.innerHTML = `<div class="page">${skeleton(3)}</div>`;
-  const [idx, h] = await Promise.all([ensureLearn(true), api("/api/home").catch(() => null)]);
+  const [idx, h, g] = await Promise.all([ensureLearn(true), api("/api/home").catch(() => null), api("/api/gap").catch(() => null)]);
   const skills = (h?.skills || []).filter((s) => s.total);
+  // 지금 고칠 것(홈 1순위)과 이어진 개념만 먼저: 사전 전체보다 지금 필요한 것부터 (L2)
+  const top = g?.ready ? g.gaps?.[0] : null;
+  const now = top ? [top.concept, ...(state.concepts[top.concept]?.related || [])].filter((id, i, a) => state.concepts[id] && a.indexOf(id) === i).slice(0, 4) : [];
   view.innerHTML = `<div class="page">
     <div class="top"><h1>배우기</h1><p>복기에서 나온 개념을 내 경기 기록과 같이 봐요.</p></div>
+    ${now.length ? `<h2 class="section">지금 고칠 것과 이어진 개념<small>${esc(top.label)}</small></h2>
+      <div class="list">${now.map((id, i) => { const c = state.concepts[id]; const qn = c.quiz_n || 0;
+        return row({ title: esc(c.title), sub: esc(c.summary || ""), end: i === 0 ? badge("1순위", "blue") : qn ? `<div class="sub">${qn}문제</div>` : "", href: `#/learn/${id}` }); }).join("")}</div>` : ""}
     ${skills.length ? `<h2 class="section">내 실력 지도<small>경기 기록으로 채점한 것만</small></h2>
       <div class="list">${skills.map((s) => {
         const r = s.pass / s.total;

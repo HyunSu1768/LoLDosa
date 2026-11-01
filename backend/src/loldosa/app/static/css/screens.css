@@ -125,3 +125,10 @@ svg.minimap { width: 100%; height: auto; display: block; border-radius: 4px; bac
 .crowd .bar { height: 8px; }
 /* 업데이트 알림: 게임 끝 알림(오른쪽 아래)과 겹치지 않게 왼쪽 아래, 내비 옆 */
 #update-note { position: fixed; left: 240px; bottom: 24px; z-index: 40; width: 300px; }
+/* 판단 훈련 2단계: 위치 추적 → 행동 */
+.q-step.locked { opacity: .45; }
+.mm-seen circle { fill: rgba(232, 64, 87, .25); stroke: var(--mm-enemy); stroke-width: 2; stroke-dasharray: 4 3; }
+.mm-seen > text { font: 800 16px var(--font); fill: #fff; }
+.look { margin-top: 12px; padding: 12px 16px; border-radius: 14px; background: var(--blue-weak); color: var(--grey900); font-size: var(--t6); }
+.look b { color: var(--blue-text); margin-right: 6px; }
+.fb { display: flex; gap: 8px; align-items: center; margin-top: 16px; }

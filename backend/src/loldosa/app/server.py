@@ -520,8 +520,8 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
     async def learn_index():
         from ..learn.skills import CHECKS, GRADED
 
-        items = [{**{k: c.get(k) for k in ("id", "category", "title", "en", "level", "summary", "aliases")},
-                  "measurable": c["id"] in GRADED}
+        items = [{**{k: c.get(k) for k in ("id", "category", "title", "en", "level", "summary", "aliases", "related")},
+                  "measurable": c["id"] in GRADED, "quiz_n": len(c.get("quiz") or [])}
                  for c in library.get("concepts", [])]
         return {"version": library.get("version", ""), "categories": library.get("categories", []),
                 "concepts": items, "read": progress.data["read"], "quiz": progress.data["quiz"],
@@ -683,6 +683,23 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
     @app.get("/api/gap")
     async def gap():
         """챌린저까지 가장 큰 차이: 고수와 플래티넘을 실제로 가르는 지표만으로 내 최근 판을 진단."""
+        return await _gap()
+
+    @app.post("/api/coach/weekly")
+    async def coach_weekly():
+        """주간 리포트: 차이 지표·채점 체크·판단 훈련을 근거로 Claude 가 이번 주 연습 계획을 짠다."""
+        from ..coach.claude import weekly_evidence
+
+        if not coach:
+            return {"status": "disabled", "message": "AI 코치가 꺼져 있어요"}
+        g = await _gap()
+        if not g.get("ready"):
+            return {"status": "not_ready", "message": g.get("reason", "")}
+        h = await home()
+        ev = weekly_evidence(g, h["skills"], progress.decision_summary(7))
+        return await coach.weekly(g, ev)
+
+    async def _gap() -> dict:
         from ..analysis.gap import load_reference, personal_gap
 
         ref = load_reference()
@@ -727,6 +744,16 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
 
         with personal_store() as st:
             rv = Reviewer(st, stats, champs).review(match_id, user.puuid).to_dict()
+        # 게임 중 초 단위 기록이 있으면 행동 목표(골드 바로 쓰기·쉬는 시간 없애기)도 채점한다
+        from ..lcu.livegame import load as load_live, summarize as live_summary
+
+        rec = load_live(LIVE_DIR, int(match_id.split("_")[-1])) if "_" in match_id else None
+        rv["live"] = live_summary(rec) if rec else None
+        if rv["live"] and rv["live"].get("samples", 0) > 10 and rv.get("is_jungle"):
+            from ..learn.skills import evaluate
+
+            rv["facts"].update(live_rich_s=rv["live"]["rich_s"], live_idle_n=len(rv["live"]["idle"]))
+            rv["checks"] = evaluate(rv["facts"])
         # 리뷰에서 지적된 개념은 '추천 학습'으로 쌓고, 개념 체크는 성장 기록으로 남긴다
         progress.flag({c for l in rv["lessons"] for c in l["concepts"] if c in by_id}, match_id)
         progress.record_checks(match_id, rv["summary"], rv["checks"], rv.get("facts"))
@@ -739,10 +766,6 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
         for l in rv["lessons"] + rv["strengths"]:
             l["concepts"] = [{"id": c, "title": by_id[c]["title"]} for c in l["concepts"] if c in by_id]
         rv["key_lesson"] = key_lesson(rv)
-        from ..lcu.livegame import load as load_live, summarize as live_summary
-
-        rec = load_live(LIVE_DIR, int(match_id.split("_")[-1])) if "_" in match_id else None
-        rv["live"] = live_summary(rec) if rec else None
         gap_cache.clear()
         return rv
 
@@ -779,22 +802,31 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
         pick = None
         if focus_fail:
             pick = next((l for l in rv["lessons"] if any(x["id"] == focus_fail["concept"] for x in l["concepts"])), None)
-        pick = pick or (rv["lessons"][0] if rv["lessons"] else None)
+        if not pick and rv["lessons"]:
+            # 사용자가 '아니에요'를 더 많이 누른 규칙(3번 이상)은 핵심 교훈에서 뒤로 미룬다
+            from ..review.analyze import lesson_rule
+
+            st = progress.lesson_rule_stats()
+            bad = {k for k, v in st.items() if v["no"] >= 3 and v["no"] > v["ok"]}
+            pick = next((l for l in rv["lessons"] if lesson_rule(l["title"]) not in bad), rv["lessons"][0])
         if not pick or not pick["concepts"]:
             return None
         cid = (focus_fail or {}).get("concept") or pick["concepts"][0]["id"]
         c = by_id.get(cid)
         if not c:
             return None
-        return {"lesson": pick, "concept": {k: c.get(k) for k in ("id", "title", "summary", "definition", "how")}}
+        from ..review.analyze import lesson_rule
+
+        return {"lesson": pick, "rule": lesson_rule(pick["title"]),
+                "concept": {k: c.get(k) for k in ("id", "title", "summary", "definition", "how")}}
 
     def concept_brief(cid: str) -> dict | None:
         c = by_id.get(cid)
         if not c:
             return None
-        from ..learn.skills import CHECKS, GRADED
+        from ..learn.skills import CHECKS, GRADED, IF_THEN
         return {"id": cid, "title": c["title"], "summary": c.get("summary"), "how": (c.get("how") or [])[:3],
-                "goal": CHECKS[cid][0] if cid in CHECKS else None, "graded": cid in GRADED}
+                "goal": CHECKS[cid][0] if cid in CHECKS else None, "graded": cid in GRADED, "if_then": IF_THEN.get(cid)}
 
     @app.get("/api/home")
     async def home():
@@ -830,7 +862,8 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
                 "rank": rank_label(progress.data["ranks"][-1]) if progress.data["ranks"] else None,
                 "practice": top_practice(), "focus": focus, "skills": sorted(skills, key=lambda x: (x["total"] == 0, x["pass"] / max(x["total"], 1))),
                 "suggest": suggest, "recommended": progress.recommended(library),
-                "games_tracked": len(progress.data["checks"]), "stats_ready": stats.available}
+                "games_tracked": len(progress.data["checks"]), "stats_ready": stats.available,
+                "ai_ready": bool(coach and coach.enabled and user.ai_enabled)}
 
     @app.put("/api/focus")
     async def set_focus(body: dict = Body(...)):
@@ -874,10 +907,18 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
             mo["concepts"] = [{"id": c, "title": by_id[c]["title"]} for c in mo["concepts"] if c in by_id]
         return moments
 
+    @app.post("/api/lesson/feedback")
+    async def lesson_feedback(body: dict = Body(...)):
+        """'이 교훈이 맞나요?' — 교훈 규칙의 정확도를 실제 사용자 판단으로 잰다."""
+        progress.record_lesson_feedback(body.get("match_id", ""), body.get("rule", "기타"), bool(body.get("ok")))
+        st = progress.lesson_rule_stats().get(body.get("rule", "기타"), {})
+        return {"ok": True, "rule_stats": st}
+
     @app.post("/api/moments/answer")
     async def moment_answer(body: dict = Body(...)):
         progress.record_decision(body.get("match_id", ""), int(body.get("minute", 0)), body.get("choice", ""),
-                                 bool(body.get("good")), body.get("concepts") or [], body.get("moment"))
+                                 bool(body.get("good")), body.get("concepts") or [], body.get("moment"),
+                                 body.get("track_ok"))
         return {"ok": True}
 
     # ---- 오늘의 복습 -------------------------------------------------------

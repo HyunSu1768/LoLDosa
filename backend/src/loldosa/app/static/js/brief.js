@@ -28,7 +28,7 @@ export async function renderBrief(view) {
       ${p ? `<section class="card suggest"><div class="eyebrow">다음 판에 할 것 하나</div>
         <div class="title" style="font-size:var(--t3);line-height:var(--t3-lh)">${esc(p.label)}</div>
         <div class="body" style="margin-top:8px">지금 <b class="num">${esc(p.mine_text)}</b>, 챌린저는 <b class="num accent">${esc(p.target_text)}</b>예요</div>
-        <div class="body" style="margin-top:12px;color:var(--grey900)">${esc(p.drill)}</div></section>`
+        <div class="body" style="margin-top:12px;color:var(--grey900)">다짐: 만약 ${esc(p.if_then || p.drill)}</div></section>`
         : empty({ em: "⏳", title: "큐를 잡으면 바로 보여 드릴게요", desc: "챔피언 선택 화면에서 이번 판 플랜을 정리해 드려요." })}
     </div>`;
     return;
@@ -61,6 +61,10 @@ function draw() {
   const main = plan.filter((p) => p !== warn);
   const head = main[0];
   const practice = msg.practice || state.home?.practice;
+  // 다짐 하나: 연습 목표(채점됨)가 있으면 그 목표, 없으면 챌린저 차이 1위 — 같은 문장이 게임 뒤 채점 기준이 된다
+  const fc = msg.focus && msg.focus.graded !== false && msg.focus.if_then ? msg.focus : null;
+  const pledge = fc ? { text: fc.if_then, from: `연습 목표 ${fc.title}` }
+    : practice ? { text: practice.if_then || practice.drill, from: `챌린저와 가장 큰 차이 ${practice.label}` } : null;
   const pickTop = b.picks[0];
 
   const heroPicked = head ? `<section class="hero" aria-live="polite">
@@ -90,7 +94,8 @@ function draw() {
       <div class="eyebrow">${esc(STAGE[b.stage] || b.stage)}${brief.ended ? " · 챔피언 선택 끝 (로딩 중에도 볼 수 있어요)" : ""}</div>
       <h1 class="brief-title">${b.my_champion_name ? `${esc(b.my_champion_name)}${b.enemy_jungler_name ? ` <span class="vs">vs</span> ${esc(b.enemy_jungler_name)}` : ""}` : "챔피언을 고르는 중이에요"}</h1>
       ${picked ? heroPicked : heroPick}
-      ${practice ? `<div class="practice-row"><span class="badge yellow">이번 판 연습</span> ${esc(practice.drill)}</div>` : ""}
+      ${pledge ? `<div class="practice-row"><span class="badge yellow">이번 판 다짐</span> <span>만약 ${esc(pledge.text)}</span></div>
+        <p class="sub" style="margin-top:6px">게임이 끝나면 이 다짐을 지켰는지 채점해요 · ${esc(pledge.from)}</p>` : ""}
       <div class="btn-row">
         <button class="btn weak" id="more">근거와 세부 보기</button>
         ${picked && ai ? `<button class="btn grey" id="ai">${ai.status === "running" ? "AI 코치가 정리하는 중…" : ai.status === "ok" ? "AI 코치 정리 보기" : "AI 코치를 쓸 수 없어요"}</button>` : ""}

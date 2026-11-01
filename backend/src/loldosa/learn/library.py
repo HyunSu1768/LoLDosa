@@ -143,16 +143,43 @@ class Progress:
             self.data["ranks"].append(snap)
             self.save()
 
+    def record_lesson_feedback(self, match_id: str, rule: str, ok: bool) -> None:
+        """'이 교훈이 맞나요?' 맞아요/아니에요. 규칙별로 모아서, 자꾸 틀리는 규칙은 핵심 교훈에서 뒤로 미룬다."""
+        fb = self.data.setdefault("lesson_feedback", {})
+        fb[f"{match_id}|{rule}"] = {"rule": rule, "ok": bool(ok), "at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+        self.save()
+
+    def lesson_rule_stats(self) -> dict[str, dict]:
+        out: dict[str, dict] = {}
+        for r in self.data.get("lesson_feedback", {}).values():
+            st = out.setdefault(r["rule"], {"ok": 0, "no": 0})
+            st["ok" if r["ok"] else "no"] += 1
+        return out
+
     def record_decision(self, match_id: str, minute: int, choice: str, good: bool, concepts: list[str],
-                        moment: dict | None = None) -> None:
+                        moment: dict | None = None, track_ok: bool | None = None) -> None:
         if moment is not None and not good:
             self.schedule(f"moment:{match_id}:{minute}", "moment", moment)
         self.data["decisions"] = [d for d in self.data["decisions"]
                                   if not (d["match_id"] == match_id and d["minute"] == minute)]
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         self.data["decisions"].append({"match_id": match_id, "minute": minute, "choice": choice, "good": good,
-                                       "concepts": concepts,
-                                       "at": datetime.now(timezone.utc).isoformat(timespec="seconds")})
+                                       "concepts": concepts, "at": now})
+        if track_ok is not None:  # 상대 정글 위치 맞히기: '상대 정글 위치 파악' 숙련도에 들어간다
+            self.data["decisions"].append({"match_id": match_id, "minute": minute, "choice": "track", "kind": "track",
+                                           "good": bool(track_ok), "concepts": ["jungle-tracking"], "at": now})
         self.save()
+
+    def decision_summary(self, days: int = 7) -> dict:
+        """최근 N일 판단 훈련: 고수와 같은 선택 수, 상대 정글 추적 정답 수."""
+        from datetime import timedelta
+
+        since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+        recent = [d for d in self.data["decisions"] if (d.get("at") or "") >= since]
+        act = [d for d in recent if d.get("kind") != "track"]
+        trk = [d for d in recent if d.get("kind") == "track"]
+        return {"total": len(act), "good": sum(1 for d in act if d["good"]),
+                "track_total": len(trk), "track_ok": sum(1 for d in trk if d["good"])}
 
     def history(self, concept: str | None = None, limit: int = 20) -> list[dict]:
         """최근 경기(날짜 내림차순)의 체크 기록. concept 을 주면 그 개념만."""

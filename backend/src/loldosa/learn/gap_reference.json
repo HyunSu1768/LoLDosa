@@ -66,6 +66,11 @@
      "p25": 58.0,
      "p75": 71.0
     }
+   },
+   "within": {
+    "players": 192,
+    "games": 3628,
+    "win_diff": 0.13
    }
   },
   "cs15": {
@@ -120,6 +125,11 @@
      "p25": 92,
      "p75": 113
     }
+   },
+   "within": {
+    "players": 193,
+    "games": 3634,
+    "win_diff": 0.205
    }
   },
   "enemy_jg_pm": {
@@ -174,6 +184,11 @@
      "p25": 0.17,
      "p75": 0.757
     }
+   },
+   "within": {
+    "players": 193,
+    "games": 3634,
+    "win_diff": 0.379
    }
   },
   "crab_first": {
@@ -228,6 +243,11 @@
      "p25": 1,
      "p75": 1
     }
+   },
+   "within": {
+    "players": 60,
+    "games": 2053,
+    "win_diff": -0.139
    }
   },
   "crab_total": {
@@ -282,6 +302,11 @@
      "p25": 2,
      "p75": 4
     }
+   },
+   "within": {
+    "players": 169,
+    "games": 3465,
+    "win_diff": 0.305
    }
   },
   "kp": {
@@ -336,6 +361,11 @@
      "p25": 0.423,
      "p75": 0.639
     }
+   },
+   "within": {
+    "players": 192,
+    "games": 3628,
+    "win_diff": -0.03
    }
   },
   "td10": {
@@ -390,6 +420,11 @@
      "p25": 2,
      "p75": 5
     }
+   },
+   "within": {
+    "players": 178,
+    "games": 3529,
+    "win_diff": 0.236
    }
   },
   "deaths10": {
@@ -444,6 +479,11 @@
      "p25": 1,
      "p75": 2
     }
+   },
+   "within": {
+    "players": 137,
+    "games": 3168,
+    "win_diff": 0.223
    }
   },
   "dead_pct": {
@@ -498,6 +538,11 @@
      "p25": 0.056,
      "p75": 0.128
     }
+   },
+   "within": {
+    "players": 193,
+    "games": 3634,
+    "win_diff": 0.452
    }
   },
   "vision_pm": {
@@ -552,6 +597,11 @@
      "p25": 0.835,
      "p75": 1.248
     }
+   },
+   "within": {
+    "players": 193,
+    "games": 3634,
+    "win_diff": 0.139
    }
   },
   "wards_pm": {
@@ -606,6 +656,11 @@
      "p25": 0.163,
      "p75": 0.336
     }
+   },
+   "within": {
+    "players": 193,
+    "games": 3634,
+    "win_diff": 0.02
    }
   },
   "ward_kills_pm": {
@@ -660,6 +715,11 @@
      "p25": 0.067,
      "p75": 0.211
     }
+   },
+   "within": {
+    "players": 193,
+    "games": 3634,
+    "win_diff": 0.054
    }
   },
   "control_wards": {
@@ -714,6 +774,11 @@
      "p25": 1,
      "p75": 5
     }
+   },
+   "within": {
+    "players": 167,
+    "games": 3352,
+    "win_diff": 0.018
    }
   },
   "unseen_recalls": {
@@ -822,6 +887,11 @@
      "p25": 394.801,
      "p75": 1236.776
     }
+   },
+   "within": {
+    "players": 193,
+    "games": 3634,
+    "win_diff": 0.601
    }
   },
   "epic_fast": {
@@ -876,6 +946,11 @@
      "p25": 0,
      "p75": 0
     }
+   },
+   "within": {
+    "players": 15,
+    "games": 250,
+    "win_diff": 0.163
    }
   },
   "epic_near_ejg": {
@@ -930,6 +1005,11 @@
      "p25": 0,
      "p75": 1
     }
+   },
+   "within": {
+    "players": 10,
+    "games": 122,
+    "win_diff": -0.273
    }
   },
   "plates": {
@@ -984,6 +1064,11 @@
      "p25": 0,
      "p75": 7
     }
+   },
+   "within": {
+    "players": 182,
+    "games": 3560,
+    "win_diff": 0.499
    }
   },
   "first_recall": {
@@ -1038,6 +1123,11 @@
      "p25": 233.462,
      "p75": 409.429
     }
+   },
+   "within": {
+    "players": 193,
+    "games": 3612,
+    "win_diff": 0.022
    }
   },
   "gold_deaths": {
@@ -1092,6 +1182,11 @@
      "p25": 0,
      "p75": 1
     }
+   },
+   "within": {
+    "players": 11,
+    "games": 142,
+    "win_diff": 0.088
    }
   },
   "lv6_time": {
@@ -1146,6 +1241,11 @@
      "p25": 386.488,
      "p75": 457.387
     }
+   },
+   "within": {
+    "players": 193,
+    "games": 3634,
+    "win_diff": 0.137
    }
   },
   "dmg_pm": {
@@ -1200,6 +1300,11 @@
      "p25": 484.255,
      "p75": 787.245
     }
+   },
+   "within": {
+    "players": 193,
+    "games": 3634,
+    "win_diff": -0.238
    }
   },
   "pings_pm": {
@@ -1254,6 +1359,11 @@
      "p25": 0.828,
      "p75": 2.52
     }
+   },
+   "within": {
+    "players": 193,
+    "games": 3634,
+    "win_diff": 0.154
    }
   },
   "missing_pings": {
@@ -1308,6 +1418,11 @@
      "p25": 1,
      "p75": 9
     }
+   },
+   "within": {
+    "players": 175,
+    "games": 3461,
+    "win_diff": -0.041
    }
   },
   "omw_pings": {
@@ -1362,6 +1477,11 @@
      "p25": 5,
      "p75": 18
     }
+   },
+   "within": {
+    "players": 187,
+    "games": 3598,
+    "win_diff": 0.136
    }
   },
   "getback_pings": {
@@ -1416,6 +1536,11 @@
      "p25": 0,
      "p75": 7
     }
+   },
+   "within": {
+    "players": 130,
+    "games": 2648,
+    "win_diff": 0.091
    }
   },
   "vision_pings": {
@@ -1470,6 +1595,11 @@
      "p25": 0,
      "p75": 5
     }
+   },
+   "within": {
+    "players": 148,
+    "games": 2859,
+    "win_diff": -0.034
    }
   }
  },
