@@ -27,3 +27,10 @@ def test_same_version_or_dev_not_available(monkeypatch):
 def test_check_offline():
     respx.get(updater.API).mock(side_effect=httpx.ConnectError("x"))
     assert "error" in updater.check()
+
+
+def test_window_check_reports_reason():
+    from loldosa.app.desktop import window_check
+
+    ok, why = window_check()
+    assert isinstance(ok, bool) and why

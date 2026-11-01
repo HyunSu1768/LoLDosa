@@ -475,7 +475,10 @@ def create_app(replay: Path | None = None, replay_interval: float = 2.0, ai: boo
         if stats.available:
             with stats.session():
                 meta = stats.meta()
+        from . import desktop
+
         return {
+            "window_error": desktop.window_error,
             "lcu": find_credentials() is not None or replay is not None,
             "replay": str(replay) if replay else None,
             "stats": meta,

@@ -221,6 +221,18 @@ def cmd_app(args) -> int:
     return 0
 
 
+def cmd_window_check(args) -> int:
+    """설치본이 앱 창을 띄울 수 있는지 (CI 와 진단용). 결과를 --out 파일에도 적는다."""
+    from .app.desktop import window_check
+
+    ok, why = window_check()
+    msg = f"{'OK' if ok else 'FAIL'} {why}"
+    _print(msg)
+    if args.out:
+        Path(args.out).write_text(msg, encoding="utf-8")
+    return 0 if ok else 1
+
+
 def cmd_bundle_export(args) -> int:
     from .bundle import export
 
@@ -610,6 +622,10 @@ def build_parser() -> argparse.ArgumentParser:
     app.add_argument("--port", type=int, default=8765)
     app.add_argument("--no-ai", action="store_true", help="Claude 코칭 끄기")
     app.set_defaults(func=cmd_app)
+
+    wc = sub.add_parser("window-check", help="앱 창을 띄울 수 있는지 점검")
+    wc.add_argument("--out", help="결과를 적을 파일")
+    wc.set_defaults(func=cmd_window_check)
 
     bd = sub.add_parser("bundle", help="미리 만든 고티어 통계 묶음").add_subparsers(dest="sub", required=True)
     be = bd.add_parser("export", help="data/stats.duckdb → 묶음 (배포용)")

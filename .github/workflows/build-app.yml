@@ -42,13 +42,25 @@ jobs:
       - name: Build
         shell: bash
         run: |
-          SEP=":"; [ "$RUNNER_OS" = "Windows" ] && SEP=";"
-          uv run pyinstaller --noconfirm --windowed --name LoLDosa \
+          SEP=":"; EXTRA=""
+          # Windows 창은 pythonnet(clr) 으로 WebView2 를 부른다. 빠지면 조용히 브라우저로 열려서 꼭 같이 넣는다.
+          [ "$RUNNER_OS" = "Windows" ] && { SEP=";"; EXTRA="--collect-all pythonnet --collect-all clr_loader --hidden-import clr"; }
+          [ "$RUNNER_OS" = "macOS" ] && EXTRA="--collect-submodules objc --collect-submodules Foundation --collect-submodules AppKit --collect-submodules WebKit --collect-submodules Quartz --collect-submodules Security --collect-submodules UniformTypeIdentifiers"
+          uv run pyinstaller --noconfirm --windowed --name LoLDosa $EXTRA \
             --collect-data loldosa --collect-submodules loldosa --collect-all webview \
             --add-data "../bundle${SEP}bundle" \
             --hidden-import uvicorn.logging --hidden-import uvicorn.protocols.http.auto \
             --hidden-import uvicorn.protocols.websockets.auto --hidden-import uvicorn.lifespan.on \
             ../packaging/loldosa_app.py
+      - name: "Window check (frozen app can open its own window)"
+        shell: bash
+        run: |
+          EXE=dist/LoLDosa/LoLDosa; [ "$RUNNER_OS" = "Windows" ] && EXE=dist/LoLDosa/LoLDosa.exe
+          [ "$RUNNER_OS" = "macOS" ] && EXE=dist/LoLDosa.app/Contents/MacOS/LoLDosa
+          export LOLDOSA_HOME="$RUNNER_TEMP/loldosa_wc"
+          "$EXE" window-check --out "$RUNNER_TEMP/wc.txt" || true
+          cat "$RUNNER_TEMP/wc.txt" || true
+          grep -q '^OK' "$RUNNER_TEMP/wc.txt"
       - name: Smoke test (frozen app serves)
         shell: bash
         run: |
