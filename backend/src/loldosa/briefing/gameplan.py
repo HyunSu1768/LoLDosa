@@ -30,10 +30,11 @@ class Phase:
     time: str
     title: str
     headline: str
-    items: list[dict] = field(default_factory=list)  # {text, kind: rule|inference, evidence}
+    items: list[dict] = field(default_factory=list)  # {text(할 일), why(왜), kind: fact|inference|rule, evidence}
+    why: str = ""  # 헤드라인(첫 할 일)의 이유
 
-    def add(self, text: str, kind: str = "inference", *ev: str) -> None:
-        self.items.append({"text": text, "kind": kind, "evidence": [e for e in ev if e]})
+    def add(self, text: str, kind: str = "inference", *ev: str, why: str = "") -> None:
+        self.items.append({"text": text, "why": why, "kind": kind, "evidence": [e for e in ev if e]})
 
 
 @lru_cache(maxsize=1)
@@ -63,7 +64,8 @@ def team_profile(ids: list[int], name=lambda c: str(c)) -> dict | None:
     ok = {k: sum(tr[str(c)][k] for c in v) / NEED[k] * TIE[k] for k, v in core.items() if len(v) >= NEED[k]}
     kind = max(ok, key=ok.get) if ok else "balanced"
     avg = {k: sum(tr[str(c)][k] for c in known) / len(known) for k in ("late", "tank")}
-    return {"type": kind, "core": [name(c) for c in core.get(kind, [])] if kind != "balanced" else [],
+    top_pct = (round((1 - min(tr[str(c)][kind] for c in core[kind])) * 100) if kind in core and core[kind] else None)
+    return {"type": kind, "core": [name(c) for c in core.get(kind, [])] if kind != "balanced" else [], "top_pct": top_pct,
             "counts": {k: len(v) for k, v in core.items()}, "late": round(avg["late"], 3), "tank": round(avg["tank"], 3),
             "splitter": core["split"][0] if core["split"] else None, "n": len(known)}
 
@@ -108,13 +110,15 @@ def _ss(sec) -> str:
 
 def build_game_plan(allies: list[int], enemies: list[int], ally_pos: dict[int, str], facts: dict,
                     name, timing_eid: str, trait_eid: str, ctx: dict | None = None) -> dict | None:
-    """이 판에만 해당하는 사실로만 시간대별 할 일을 만든다. 어느 판에나 나올 일반론은 넣지 않는다.
+    """이 판에만 해당하는 사실로 '할 일 + 왜'를 시간대별로 만든다. 어느 판에나 나올 일반론은 넣지 않는다.
 
+    '왜'는 두 겹: (1) 이 판 데이터(상대 정글 동선·라인별 10분 골드·챔피언 성향 백분위)
+                  (2) 그 데이터가 게임 안에서 무슨 뜻인지 (예: 풀캠이 끝나는 쪽 → 가장 가까운 라인에 첫 갱)
     ctx (엔진이 통계에서 채움):
-      lanes:  {"top"|"mid"|"bot": {"ally", "enemy", "gd", "n", "eid"}} — 이 라인 매치업의 10분 골드 차(표본으로 줄인 값)
-      ejg:    {"name", "gank_lane", "gank_share", "gank_s", "n", "invade", "invade_base", "fd", "fd_base", "fg", "fg_base", "eid"}
-      late:   {"ally": [(이름, %p)...], "enemy": [...], "eid"}
-    각 줄은 챔피언 이름이나 이 판의 숫자가 들어가야만 만들어진다. 쓸 사실이 없는 시간대는 통째로 뺀다."""
+      lanes: {"top"|"mid"|"bot": {"ally", "enemy", "gd", "ga", "ge", "n", "eid"}}
+      ejg:   {"name", "gank_lane", "gank_share", "gank_s", "n", "invade", "invade_base", "fd", "fd_base", "fg", "fg_base",
+              "route": {"start", "start_p", "side3", "side3_p", "clear", "clear_p"}, "eid", "route_eid"}
+      late:  {"ally": [(이름, 차)], "enemy": [...], "ally_sum", "enemy_sum", "eid"}"""
     from .engine import josa
 
     ctx = ctx or {}
@@ -123,104 +127,151 @@ def build_game_plan(allies: list[int], enemies: list[int], ally_pos: dict[int, s
         return None
     lanes, ejg, late = ctx.get("lanes", {}), ctx.get("ejg"), ctx.get("late")
     phases: list[Phase] = []
+    SIDE = {"top": "탑", "bot": "봇"}
+    CLEAR = {"full_clear": "풀캠", "partial": "4~5캠프", "three_or_less": "3캠프 이하"}
 
     def edge(lane, lo=150):
         x = lanes.get(lane)
         return x if x and abs(x["gd"]) >= lo else None
 
-    # ---------- ~5분: 상대 정글 습관 + 라인 매치업으로 첫 갱·카정 방향 ----------
+    def finish(p: Phase) -> None:
+        if p.items:
+            p.headline = _first(p.items[0]["text"])
+            p.why = p.items[0]["why"]
+            phases.append(p)
+
+    # ---------- ~5분 ----------
     p = Phase("early", "~5분", "초반", "")
+    if ejg and ejg.get("gank_lane") and ejg["gank_share"] >= 0.42:
+        gl, en, rt = ejg["gank_lane"], ejg["name"], ejg.get("route")
+        other = "탑" if gl == "bot" else "봇"
+        mine = lanes.get(gl)
+        who = f"{mine['ally']}에게 " if mine else ""
+        if rt and rt.get("side3") == gl:
+            why = (f"{josa(en, '은는')} {SIDE.get(rt['start'], '?')} 쪽에서 시작하는 판이 {rt['start_p']:.0%}이고, "
+                   f"{josa(CLEAR.get(rt['clear'], '정글링'), '을를')} 마친 3:00엔 {SIDE[gl]} 쪽에 있는 판이 {rt['side3_p']:.0%}예요. "
+                   f"정글링이 끝난 자리에서 가장 가까운 라인이 {SIDE[gl]}이라 첫 갱이 {josa(SIDE[gl], '으로')} 와요 "
+                   f"({ejg['n']}판 중 {round(ejg['gank_share'] * 100)}%, 보통 {_ss(ejg['gank_s'])}). "
+                   f"그동안 {other} 쪽 상대 정글은 비어 있어요.")
+            ev = (ejg["eid"], ejg.get("route_eid"))
+        else:
+            why = (f"{josa(en, '은는')} 첫 갱을 {josa(SIDE.get(gl, gl), '으로')} 오는 판이 {round(ejg['gank_share'] * 100)}%예요 "
+                   f"(보통 {_ss(ejg['gank_s'])}, {ejg['n']}판). 상대 정글이 {SIDE.get(gl, gl)}에 있는 동안 {other} 쪽은 비어 있어요.")
+            ev = (ejg["eid"],)
+        p.add(f"{_ss(ejg['gank_s'] - 30)}쯤 {who}{SIDE.get(gl, gl)} 핑을 찍고, 그 시간엔 {other} 쪽 바위게나 상대 캠프를 챙겨요.",
+              "fact", *ev, why=why)
     win = sorted([l for l in ("top", "mid", "bot") if edge(l) and lanes[l]["gd"] > 0], key=lambda l: -lanes[l]["gd"])
     lose = sorted([l for l in ("top", "mid", "bot") if edge(l) and lanes[l]["gd"] < 0], key=lambda l: lanes[l]["gd"])
-    if ejg and ejg.get("gank_lane") and ejg["gank_share"] >= 0.42:
-        gl = ejg["gank_lane"]
-        mine = lanes.get(gl)
-        who = f" 우리 {mine['ally']}" if mine else ""
-        p.add(f"{josa(ejg['name'], '은는')} 첫 갱을 {josa(LANE_NAME[gl], '으로')} {round(ejg['gank_share'] * 100)}% 와요 (보통 {_ss(ejg['gank_s'])}, {ejg['n']}판). "
-              f"{_ss(ejg['gank_s'] - 30)}쯤{who}에게 핑 찍고, 그 시간엔 반대편에서 바위게·카정을 챙겨요.", "fact", ejg["eid"])
     for l in win[:1]:
         x = lanes[l]
-        p.add(f"{LANE_NAME[l]} {x['ally']} vs {x['enemy']}: 10분 골드 차 예상 {x['gd']:+,.0f}, 이기는 라인이에요 ({x['n']}판). 첫 갱은 {LANE_NAME[l]}에 쓰면 굴러가요.",
-              "fact", x["eid"])
+        p.add(f"첫 갱은 {LANE_NAME[l]}에 써요 ({x['ally']} vs {x['enemy']}).", "fact", x["eid"],
+              why=(f"{josa(x['ally'], '은는')} {LANE_NAME[l]}에서 10분까지 평균 {x['ga']:+,.0f}골드, {josa(x['enemy'], '은는')} {x['ge']:+,.0f}골드를 내서 "
+                   f"우리가 {x['gd']:,.0f}골드쯤 앞서는 라인이에요. 밀리는 쪽 라이너는 체력·아이템이 부족해서 갱 한 번에 킬이나 귀환이 나기 쉬워요. "
+                   f"킬이 나면 {LANE_NAME[l]}이 포탑 방패를 먼저 깨고, 이긴 라이너는 바위게·오브젝트에 먼저 와요."))
     for l in lose[:1]:
         x = lanes[l]
-        p.add(f"{LANE_NAME[l]} {x['ally']} vs {x['enemy']}: 10분 골드 차 예상 {x['gd']:+,.0f}, 밀리는 라인이에요 ({x['n']}판). "
-              f"상대 정글이 노리기 쉬워서 {LANE_NAME[l]} 쪽 역갱 위치를 잡아 두세요.", "fact", x["eid"])
+        p.add(f"{LANE_NAME[l]} 근처에서 역갱을 노려요 ({x['ally']} vs {x['enemy']}).", "fact", x["eid"],
+              why=(f"{josa(x['enemy'], '은는')} {LANE_NAME[l]}에서 10분까지 평균 {x['ge']:+,.0f}골드, {josa(x['ally'], '은는')} {x['ga']:+,.0f}골드라 "
+                   f"상대가 {abs(x['gd']):,.0f}골드쯤 앞서는 라인이에요. 앞서는 쪽은 라인을 밀고 앞으로 나와요. 앞으로 나온 라이너가 있는 곳엔 상대 정글도 갱을 오기 쉬워서, "
+                   f"내가 근처에 있으면 2:2 싸움을 우리 쪽에서 받을 수 있어요."))
     if ejg and ejg.get("invade") and ejg["invade"] >= ejg["invade_base"] * 1.35:
-        p.add(f"{josa(ejg['name'], '은는')} 카정이 잦아요 (상대 정글 몹 평균 {ejg['invade']:.0f}개, 정글 평균 {ejg['invade_base']:.0f}개). "
-              f"2:30쯤 내 정글 입구에 와드를 박아요.", "fact", ejg["eid"])
-    # 3:00 상대 정글 위치는 '이번 판 플랜 · 주의'에 이미 있어서 여기선 반복하지 않는다
-    if p.items:
-        p.headline = _first(p.items[0]["text"])
-        phases.append(p)
+        p.add("2:30쯤 내 정글 입구에 와드를 박아요.", "fact", ejg["eid"],
+              why=(f"{josa(ejg['name'], '은는')} 상대 정글 몹을 한 판에 평균 {ejg['invade']:.0f}개 먹어요 (정글 평균 {ejg['invade_base']:.0f}개). "
+                   f"카정을 자주 오는 챔피언이라 캠프를 뺏기면 레벨이 밀려요. 먼저 보면 캠프를 비우거나 라이너를 불러 같이 싸울 수 있어요."))
+    finish(p)
 
-    # ---------- 5~15분: 어느 쪽 오브젝트를 이 판 라인 결과로 고르기 ----------
+    # ---------- 5~15분 ----------
     p = Phase("objectives", "5~15분", "드래곤·유충", "")
-    top_s = (lanes.get("top", {}).get("gd", 0)) + 0.5 * lanes.get("mid", {}).get("gd", 0)
-    bot_s = (lanes.get("bot", {}).get("gd", 0)) + 0.5 * lanes.get("mid", {}).get("gd", 0)
+    top_s = lanes.get("top", {}).get("gd", 0) + 0.5 * lanes.get("mid", {}).get("gd", 0)
+    bot_s = lanes.get("bot", {}).get("gd", 0) + 0.5 * lanes.get("mid", {}).get("gd", 0)
     if abs(top_s - bot_s) >= 200 and (lanes.get("top") or lanes.get("bot")):
-        pick, other = ("grub", "dragon") if top_s > bot_s else ("dragon", "grub")
-        lane = "top" if pick == "grub" else "bot"
+        pick = "grub" if top_s > bot_s else "dragon"
+        lane, where = ("top", "탑 쪽 강") if pick == "grub" else ("bot", "봇 쪽 강")
         x = lanes.get(lane)
-        why = f"{LANE_NAME[lane]} {x['ally']}({x['gd']:+,.0f})" if x else LANE_NAME[lane]
         when = "8:00 유충" if pick == "grub" else "5:00 첫 드래곤"
-        p.add(f"{why} 쪽이 이겨서 {when}을 노려요. {OBJ_KO[other]}은 상대가 가져가면 그 시간에 반대편 이득을 챙겨요.", "fact",
-              *[lanes[l]["eid"] for l in ("top", "mid", "bot") if l in lanes])
-    if ejg and ejg.get("fd") is not None and ejg.get("fd_base") and ejg["fd"] - ejg["fd_base"] >= 0.08:
-        p.add(f"{josa(ejg['name'], '은는')} 첫 드래곤을 {round(ejg['fd'] * 100)}% 가져가요 (정글 평균 {round(ejg['fd_base'] * 100)}%). "
-              f"4:30 전에 봇 강가 시야를 먼저 잡아요.", "fact", ejg["eid"])
-    if ejg and ejg.get("fg") is not None and ejg.get("fg_base") and ejg["fg"] - ejg["fg_base"] >= 0.08:
-        p.add(f"{josa(ejg['name'], '은는')} 첫 유충을 {round(ejg['fg'] * 100)}% 가져가요 (정글 평균 {round(ejg['fg_base'] * 100)}%). "
-              f"7:30 전에 탑 강가 시야를 먼저 잡아요.", "fact", ejg["eid"])
+        trade = "드래곤" if pick == "grub" else "유충"
+        winners = f"{LANE_NAME[lane]} {x['ally']}" if x else LANE_NAME[lane]
+        p.add(f"{josa(when, '을를')} 노리고, {josa(trade, '은는')} 내줘도 돼요.", "fact", *[lanes[l]["eid"] for l in ("top", "mid", "bot") if l in lanes],
+              why=(f"{'유충' if pick == 'grub' else '드래곤'}은 {where}에 있어요. 오브젝트 싸움엔 근처 라이너가 먼저 와야 이기는데, "
+                   f"라인을 이긴 라이너는 라인을 밀어 놓고 먼저 움직일 수 있어요. 이 판은 {winners} 쪽이 이기는 라인이라 그쪽이 먼저 와요. "
+                   f"반대편 {josa(trade, '은는')} 상대가 가져가는 시간에 우리가 {'유충' if pick == 'grub' else '드래곤'}·포탑으로 바꾸면 손해가 아니에요."))
+    rt = (ejg or {}).get("route") or {}
+    chosen = "grub" if (abs(top_s - bot_s) >= 200 and top_s > bot_s) else "dragon" if abs(top_s - bot_s) >= 200 else None
+    # 내주기로 한 쪽 오브젝트의 시야 줄은 빼서 앞뒤가 안 맞는 말을 하지 않는다
+    if chosen != "grub" and ejg and ejg.get("fd") is not None and ejg.get("fd_base") and ejg["fd"] - ejg["fd_base"] >= 0.08:
+        extra = (f" 이 챔피언은 3:00에 봇 쪽에 있는 판이 {rt['side3_p']:.0%}라 5:00 드래곤과 동선이 이어져요." if rt.get("side3") == "bot" else "")
+        p.add("4:30 전에 봇 강가 시야를 먼저 잡아요.", "fact", ejg["eid"],
+              why=f"{josa(ejg['name'], '은는')} 첫 드래곤을 {round(ejg['fd'] * 100)}% 가져가요 (정글 평균 {round(ejg['fd_base'] * 100)}%).{extra} "
+                  f"드래곤 앞 시야를 먼저 잡은 쪽이 상대가 오는 걸 보고 싸울지 정할 수 있어요.")
+    if chosen != "dragon" and ejg and ejg.get("fg") is not None and ejg.get("fg_base") and ejg["fg"] - ejg["fg_base"] >= 0.08:
+        extra = (f" 이 챔피언은 3:00에 탑 쪽에 있는 판이 {rt['side3_p']:.0%}예요." if rt.get("side3") == "top" else "")
+        p.add("7:30 전에 탑 강가 시야를 먼저 잡아요.", "fact", ejg["eid"],
+              why=f"{josa(ejg['name'], '은는')} 첫 유충을 {round(ejg['fg'] * 100)}% 가져가요 (정글 평균 {round(ejg['fg_base'] * 100)}%).{extra} "
+                  f"유충 앞 시야를 먼저 잡은 쪽이 싸울지 정할 수 있어요.")
     if p.items:
-        p.headline = _first(p.items[0]["text"])
         p.add("드래곤은 5:00부터 5분마다, 공허 유충은 8:00에 3마리가 한 번만 나오고 14:45에 사라져요.", "rule", timing_eid)
-        phases.append(p)
+    finish(p)
 
-    # ---------- 15~20분: 조합의 핵심 챔피언 이름으로 ----------
+    # ---------- 15~20분 ----------
     p = Phase("mid", "15~20분", "전령·사이드", "")
     t_us, t_them = us["type"], (them or {}).get("type")
-    names_us = "·".join(us["core"][:3])
+    nm = "·".join(us["core"][:3])
+    pct = f"상위 {us['top_pct']}%" if us.get("top_pct") is not None else "상위권"
     if t_us == "split" and us.get("splitter"):
         sp = name(us["splitter"])
-        p.add(f"{josa(sp, '이가')} 혼자 사이드를 밀 때 나머지는 반대편 오브젝트 근처에 있어요. 상대가 사이드로 2명 가면 그때 전령·드래곤을 쳐요.", "inference", trait_eid)
-    elif t_us == "engage" and names_us:
-        p.add(f"{josa(names_us, '이가')} 묶을 수 있을 때 다섯이 같이 싸워요. 좁은 정글 길목이나 오브젝트 앞이 좋아요.", "inference", trait_eid)
-    elif t_us == "poke" and names_us:
-        p.add(f"{names_us}로 오브젝트 앞에서 먼저 깎고 들어가요. 전령은 19:45 전에 미드 포탑에 써요.", "inference", trait_eid)
-    elif t_us == "pick" and names_us:
-        p.add(f"{josa(names_us, '이가')} 한 명을 끊으면 바로 오브젝트로 가요. 상대 정글 입구에 시야를 깔아요.", "inference", trait_eid)
-    elif t_us == "protect" and names_us:
-        p.add(f"{josa(names_us, '이가')} 지켜 주는 캐리 옆에서 싸우고, 먼저 들어가지 말아요.", "inference", trait_eid)
+        p.add(f"{josa(sp, '이가')} 사이드를 밀 때 나머지는 반대편 오브젝트 근처에 있어요.", "inference", trait_eid,
+              why=(f"{josa(sp, '은는')} 후반에 혼자 포탑을 민 기록이 챔피언 중 {pct}예요. 상대는 막으러 1~2명을 보내야 하고, "
+                   f"그만큼 반대편은 우리가 사람 수에서 앞서요. 그때 전령·드래곤을 쳐요."))
+    elif t_us == "engage" and nm:
+        p.add("좁은 정글 길목이나 오브젝트 앞에서 다섯이 같이 싸워요.", "inference", trait_eid,
+              why=(f"{josa(nm, '은는')} 상대를 묶은 횟수·시간과 맞아 준 비중이 챔피언 중 {pct}예요. "
+                   f"좁은 곳에서 한 번 묶이면 상대 여러 명이 같이 맞고, 넓은 곳에선 상대가 흩어져서 피해요."))
+    elif t_us == "poke" and nm:
+        p.add("오브젝트 앞에 먼저 가서 깎은 다음에 들어가요. 전령은 19:45 전에 미드 포탑에 써요.", "inference", trait_eid,
+              why=(f"{josa(nm, '은는')} 받은 피해에 비해 주는 피해가 큰 챔피언이에요 (챔피언 중 {pct}). "
+                   f"대치가 길어질수록 상대 체력만 줄어서, 깎인 상대는 오브젝트를 지키지 못하고 물러나요."))
+    elif t_us == "pick" and nm:
+        p.add("상대 정글 입구에 시야를 깔고, 한 명을 끊으면 바로 오브젝트로 가요.", "inference", trait_eid,
+              why=(f"{josa(nm, '은는')} 같이 끊는 킬이 챔피언 중 {pct}예요. 한 명이 빠진 4:5에선 상대가 오브젝트를 지킬 수 없어요. "
+                   f"끊고 나서 귀환부터 하면 그 시간이 지나가요."))
+    elif t_us == "protect" and nm:
+        p.add("캐리 옆에서 싸우고 먼저 들어가지 않아요.", "inference", trait_eid,
+              why=(f"{josa(nm, '은는')} 아군 회복·보호막이 챔피언 중 {pct}예요. 캐리가 오래 살아남는 게 이 조합의 힘이라, "
+                   f"먼저 들어가서 흩어지면 그 장점이 사라져요."))
     if them and t_them in VS_NAMED and them["core"]:
-        p.add(VS_NAMED[t_them].format(who=josa("·".join(them["core"][:3]), "이가"), who_plain="·".join(them["core"][:3])), "inference", trait_eid)
+        act, why = VS_NAMED[t_them]
+        who = "·".join(them["core"][:3])
+        tp = f"상위 {them['top_pct']}%" if them.get("top_pct") is not None else "상위권"
+        p.add(act.format(who=who), "inference", trait_eid, why=why.format(who=josa(who, "은는"), pct=tp))
     mid = edge("mid")
     if mid:
         x = lanes["mid"]
-        p.add(f"미드 {x['ally']} vs {x['enemy']} 10분 골드 차 예상 {x['gd']:+,.0f}: "
-              + ("미드가 먼저 움직일 수 있어서 전령(15:00) 싸움에 유리해요." if x["gd"] > 0 else "미드가 늦게 움직여요. 전령은 미드가 밀어 둔 다음에 가요."),
-              "fact", x["eid"])
+        up = x["gd"] > 0
+        p.add("전령(15:00)은 미드가 밀어 둔 다음에 같이 가요." if not up else "전령(15:00) 싸움은 미드와 같이 먼저 자리 잡아요.", "fact", x["eid"],
+              why=(f"미드 {josa(x['ally'], '은는')} 10분까지 평균 {x['ga']:+,.0f}골드, {josa(x['enemy'], '은는')} {x['ge']:+,.0f}골드를 내요. "
+                   f"미드는 양쪽 강에 가장 빨리 가는 라인이라, "
+                   + ("라인을 이기는 우리 미드가 먼저 움직일 수 있어요." if up else "라인이 밀리면 우리 미드가 늦게 와요.")))
     if p.items:
-        p.headline = _first(p.items[0]["text"])
         p.add("전령은 15:00에 나와 19:45까지 있어요. 포탑 방패는 안 떨어지고 2·3차 포탑에도 있어요.", "rule", timing_eid)
-        phases.append(p)
+    finish(p)
 
-    # ---------- 20분~: 어느 챔피언이 후반에 강한지 이름과 숫자로 ----------
+    # ---------- 20분~ ----------
     p = Phase("late", "20분~", "바론·마무리", "")
     if late and (late.get("ally") or late.get("enemy")):
         a = "·".join(n for n, _ in late.get("ally", [])[:2])
         e = "·".join(n for n, _ in late.get("enemy", [])[:2])
         sa, se = late.get("ally_sum", 0.0), late.get("enemy_sum", 0.0)
         if se - sa >= 0.03 and e:
-            p.add(f"상대 {josa(e, '은는')} 35분이 넘으면 승률이 오르는 챔피언이에요 (팀 평균 {se * 100:+.1f}%p, 우리 {sa * 100:+.1f}%p). "
-                  f"20분 바론과 25분 전후 마무리를 노려요.", "fact", late["eid"])
+            p.add("20분 바론과 25분 전후 마무리를 노려요.", "fact", late["eid"],
+                  why=(f"상대 {josa(e, '은는')} 30분이 넘은 판에서 승률이 오르는 챔피언이에요 (팀 평균 {se * 100:+.1f}%p, 우리 {sa * 100:+.1f}%p). "
+                       f"아이템이 쌓일수록 강해진다는 뜻이라, 시간이 갈수록 상대가 유리해져요."))
         elif sa - se >= 0.03 and a:
-            p.add(f"우리 {josa(a, '은는')} 35분이 넘으면 승률이 오르는 챔피언이에요 (팀 평균 {sa * 100:+.1f}%p, 상대 {se * 100:+.1f}%p). "
-                  f"바론을 서두르지 말고 영혼·장로 싸움에서 이겨요.", "fact", late["eid"])
+            p.add("바론을 서두르지 말고 영혼·장로 싸움에서 이겨요.", "fact", late["eid"],
+                  why=(f"우리 {josa(a, '은는')} 30분이 넘은 판에서 승률이 오르는 챔피언이에요 (팀 평균 {sa * 100:+.1f}%p, 상대 {se * 100:+.1f}%p). "
+                       f"아이템이 쌓일수록 강해진다는 뜻이라, 무리한 싸움만 안 하면 시간이 우리 편이에요."))
     if p.items:
-        p.headline = _first(p.items[0]["text"])
         p.add("바론은 20:00에 나와요. 장로 드래곤은 한 팀이 영혼을 얻고 6분 뒤에 나와요.", "rule", timing_eid)
-        phases.append(p)
+    finish(p)
 
     return {
         "us": {"type": t_us, "label": TYPE_KO[t_us], "why": _why(us)},
@@ -231,10 +282,15 @@ def build_game_plan(allies: list[int], enemies: list[int], ally_pos: dict[int, s
 
 
 # 상대 조합 대처 (상대 핵심 챔피언 이름을 넣어서)
-VS_NAMED = {
-    "engage": "상대는 {who} 들어오는 조합이에요. 좁은 길목에서 먼저 싸우지 말고, 오브젝트 앞에선 진입 길에 시야부터 봐 두세요.",
-    "poke": "상대 {who_plain}에게 오래 대치하면 깎이기만 해요. 시야를 먼저 잡고 짧게 들어가거나 옆으로 돌아 들어가요.",
-    "pick": "상대 {who} 끊는 조합이에요. 시야 없는 정글엔 혼자 들어가지 말고, 와드는 둘이 같이 박아요.",
-    "protect": "상대 {who} 캐리를 지켜 줘요. 뒤 캐리를 바로 노리기 어려우니 사이드와 오브젝트 교환으로 시간을 써요.",
-    "split": "상대 {who} 혼자 사이드를 밀어요. 그 라인은 1명이 받고, 나머지는 반대편 오브젝트를 4:4로 노려요.",
+VS_NAMED = {  # (할 일, 왜)
+    "engage": ("좁은 길목에서 먼저 싸우지 말고, 오브젝트 앞에선 상대 진입 길에 시야부터 봐 둬요.",
+               "상대 {who} 상대를 묶는 기록이 챔피언 중 {pct}예요. 좁은 곳에서 묶이면 여럿이 같이 맞아서, 넓은 곳에서 받아치는 게 유리해요."),
+    "poke": ("오브젝트 앞에서 오래 대치하지 말고, 시야를 먼저 잡고 짧게 들어가요.",
+             "상대 {who} 받은 피해보다 주는 피해가 큰 챔피언이에요 (챔피언 중 {pct}). 대치가 길어질수록 우리 체력만 줄어요."),
+    "pick": ("시야 없는 정글엔 혼자 들어가지 말고, 와드는 둘이 같이 박아요.",
+             "상대 {who} 같이 끊는 킬이 챔피언 중 {pct}예요. 혼자 있는 한 명이 잡히면 4:5가 돼서 오브젝트를 못 지켜요."),
+    "protect": ("뒤 캐리를 바로 노리지 말고, 사이드와 오브젝트 교환으로 시간을 써요.",
+                "상대 {who} 아군 회복·보호막이 챔피언 중 {pct}예요. 정면 싸움에선 캐리가 오래 살아서 우리가 먼저 지쳐요."),
+    "split": ("사이드는 1명이 받고, 나머지는 반대편 오브젝트를 4:4로 노려요.",
+              "상대 {who} 후반에 혼자 포탑을 민 기록이 챔피언 중 {pct}예요. 둘이 막으러 가면 반대편에서 사람이 모자라요."),
 }

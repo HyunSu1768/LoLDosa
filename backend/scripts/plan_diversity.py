@@ -56,6 +56,7 @@ def main(matches_db: str, stats_db: str, n: int) -> None:
         for ph in (b.game_plan or {}).get("phases", []):
             got.append((f"phase:{ph['key']}:headline", ph["headline"]))
             got += [(f"phase:{ph['key']}:item", i["text"]) for i in ph["items"] if i["kind"] != "rule"]
+            got += [(f"phase:{ph['key']}:why", i["why"]) for i in ph["items"] if i["kind"] != "rule" and i.get("why")]
         if b.game_plan.get("vs"):
             got.append(("vs", b.game_plan["vs"]))
         k = 0

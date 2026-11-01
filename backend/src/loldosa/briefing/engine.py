@@ -747,12 +747,13 @@ class BriefingEngine:
                     ge = me_["gd10"] * me_["games"] / (me_["games"] + shrink_k)
                     gds.append(ga - ge)
                     ns += min(ma["games"], me_["games"])
-                    who.append((self.name(a), self.name(e)))
+                    who.append((self.name(a), self.name(e), ga, ge))
             if gds:
                 gd = sum(gds) / len(gds)
                 ally, enemy = "·".join(w[0] for w in who), "·".join(w[1] for w in who)
                 eid = self.e(f"{LANE_KO[lane]} {ally} vs {enemy}: 각자 그 라인에서 낸 10분 골드 차 평균의 차이 {gd:+.0f} (판 수로 줄인 값)", ns, s)
-                lanes[lane] = {"ally": ally, "enemy": enemy, "gd": gd, "n": ns, "eid": eid}
+                lanes[lane] = {"ally": ally, "enemy": enemy, "gd": gd, "n": ns, "eid": eid,
+                               "ga": sum(w[2] for w in who) / len(who), "ge": sum(w[3] for w in who) / len(who)}
         ctx["lanes"] = lanes
         ej = theirs.get("JUNGLE")
         if ej:
@@ -766,7 +767,13 @@ class BriefingEngine:
                              + f", 상대 정글 몹 평균 {c['enemy_jungle_cs'] or 0:.1f}개(정글 평균 {base.get('invade') or 0:.1f}), "
                              f"첫 드래곤 {c['first_dragon_rate'] or 0:.0%}(평균 {base.get('fd') or 0:.0%}), 첫 유충 {c['first_grub_rate'] or 0:.0%}(평균 {base.get('fg') or 0:.0%})",
                              c["games"], s)
-                ctx["ejg"] = {"name": self.name(ej), "n": c["games"], "eid": eid,
+                rp = self.stats.route_profile(s, ej, state.enemy_team_id) or self.stats.route_profile(s, ej)
+                if rp and rp["games"] >= 15:
+                    eid_r = self.e(f"{self.name(ej)} 정글 동선 {rp['games']}판: 시작 {rp['start']} 쪽 {rp['start_p']:.0%}, "
+                                   f"3:00 위치 {rp['side3']} 쪽 {rp['side3_p']:.0%}, 3분까지 {rp['clear']} {rp['clear_p']:.0%}", rp["games"], s)
+                else:
+                    rp, eid_r = None, None
+                ctx["ejg"] = {"name": self.name(ej), "n": c["games"], "eid": eid, "route": rp, "route_eid": eid_r,
                               "gank_lane": top["lane"] if top and tot >= 15 else None,
                               "gank_share": (top["games"] / tot) if top and tot else 0, "gank_s": top["median_s"] if top else None,
                               "invade": c["enemy_jungle_cs"], "invade_base": base.get("invade") or 0,

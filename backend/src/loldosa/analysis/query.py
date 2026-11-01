@@ -238,6 +238,31 @@ class StatsDB:
         return self.one(f"""SELECT games, wins, gd10 FROM lane_matchups
                             WHERE {w} AND position=? AND champion_id=? AND enemy_id=?""", p + [position, champ, enemy])
 
+    def route_profile(self, s: Scope, champ: int, team_id: int | None = None) -> dict | None:
+        """정글러가 어느 쪽에서 시작해서 3:00 에 어느 쪽에 있는지, 어떻게 도는지 (비율). '왜 그 라인에 갱 오나'의 근거."""
+        w, p = self._w(s)
+        q, params = f"SELECT start_side, side3, clear3, sum(games) AS g FROM routes WHERE {w} AND champion_id=?", p + [champ]
+        if team_id:
+            q += " AND team_id=?"
+            params.append(team_id)
+        rows = self.rows(q + " GROUP BY ALL", params)
+        tot = sum(r["g"] for r in rows)
+        if not tot:
+            return None
+
+        def share(col):
+            d: dict = {}
+            for r in rows:
+                if r[col]:
+                    d[r[col]] = d.get(r[col], 0) + r["g"]
+            k = max(d, key=d.get) if d else None
+            return k, (d[k] / tot if k else 0)
+
+        st, st_p = share("start_side")
+        s3, s3_p = share("side3")
+        cl, cl_p = share("clear3")
+        return {"games": tot, "start": st, "start_p": st_p, "side3": s3, "side3_p": s3_p, "clear": cl, "clear_p": cl_p}
+
     def lane_strength(self, s: Scope, position: str, champ: int) -> dict | None:
         """그 라인에서 이 챔피언의 10분 골드 차 평균 (모든 상대 합산). 특정 맞대결은 판 수가 적어서 이걸로 라인 우세를 본다."""
         w, p = self._w(s)

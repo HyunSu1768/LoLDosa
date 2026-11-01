@@ -29,6 +29,7 @@ SYSTEM = """너는 리그 오브 레전드 정글 코치다. 사용자는 지금
 8. GAME_PLAN 은 규칙으로 만든 전체 운영 뼈대예요. 시간대(~5분, 5~15분, 15~20분, 20분~)와 방향을 바꾸지 말고,
    카드 근거(라인별 갭 각, 상대 정글 위치, 레벨대 싸움 승률 등)와 양 팀 조합 이유(어떤 챔피언이 무엇을 잘하는지)를 엮어서
    이번 판에 맞는 구체적인 행동으로 풀어 써요. 조합 이유에 나온 챔피언 이름은 그대로 써도 돼요.
+10. 모든 포인트는 '할 일'과 '왜'를 같이 써요: "~해요. ~이라서요." 처럼. 왜는 GAME_PLAN 의 '왜'와 카드 근거에서만 가져와요.
 9. 시간·규칙은 GAME_PLAN 의 '2026 규칙' 항목에 있는 것만 써요. 아타칸·힘의 위업·14분 방패 같은 예전 규칙은 쓰지 않아요.
 형식: {"headline": "이번 판 한 줄 운영 방향", "points": [{"phase": "~5분|5~15분|15~20분|20분~", "text": "...", "evidence": ["E1"]}]}
 points 는 4~5개, 시간대마다 1개 이상, 시간 순서로."""
@@ -117,7 +118,8 @@ def build_prompt(briefing: dict) -> str:
             "상대 조합": f"{gp['them']['label']} — {gp['them']['why']}" if gp.get("them") else "미확정",
             "상대 조합 대처": gp.get("vs"),
             "phases": [{"time": p["time"], "headline": p["headline"],
-                        "items": [{"text": i["text"], "kind": "2026 규칙" if i["kind"] == "rule" else "판단", "evidence": i["evidence"]}
+                        "items": [{"할 일": i["text"], "왜": i.get("why", ""), "kind": "2026 규칙" if i["kind"] == "rule" else "판단",
+                                   "evidence": i["evidence"]}
                                   for i in p["items"]]} for p in gp["phases"]],
         }
     return ("아래 브리핑 데이터만 근거로 이번 판 정글 운영 방향을 게임 시작부터 끝까지 정리해줘.\n"

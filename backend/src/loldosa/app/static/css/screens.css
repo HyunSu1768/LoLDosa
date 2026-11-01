@@ -174,3 +174,11 @@ svg.minimap { width: 100%; height: auto; display: block; border-radius: 4px; bac
   .brief-hero { font-size: 20px; line-height: 1.4; }
   .page, .page.wide { padding: var(--s4) var(--s3) 96px; }
 }
+
+/* 할 일 + 왜: 할 일은 굵게 한 줄, 왜는 바로 아래 회색 블록 (이유 없는 지시는 안 따라 하게 돼서) */
+.why-short { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.todo-item { padding: 14px 0; border-bottom: 1px solid var(--grey100, #2c2c35); }
+.todo-item:last-child { border-bottom: 0; }
+.todo-do { font-size: var(--t5, 17px); font-weight: 700; color: var(--grey900); line-height: 1.5; }
+.todo-why { margin-top: 8px; padding: 10px 12px; border-radius: 10px; background: var(--bg-layer, #202027); color: var(--grey700); line-height: 1.6; }
+.todo-why b { color: var(--blue-text, #64a8ff); margin-right: 4px; }

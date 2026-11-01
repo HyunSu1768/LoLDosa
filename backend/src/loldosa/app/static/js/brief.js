@@ -114,13 +114,15 @@ function gamePlan(gp, pool) {
   if (!gp || !gp.phases || !gp.phases.length) return "";
   return `<h2 class="section">전체 운영<small>우리 ${esc(gp.us.label)}${gp.them ? ` · 상대 ${esc(gp.them.label)}` : ""}</small></h2>
     <div class="list">${gp.phases.map((p, i) => row({ lead: `<span class="tag num">${esc(p.time)}</span>`, title: linkify(p.headline),
-      sub: esc(p.title), attrs: `data-ph="${i}"` })).join("")}</div>
+      sub: p.why ? `<span class="why-short">왜? ${esc(p.why)}</span>` : esc(p.title), attrs: `data-ph="${i}"` })).join("")}</div>
     ${gp.vs ? `<p class="sub" style="margin-top:8px">${linkify(gp.vs)}</p>` : ""}`;
 }
 function phaseSheet(gp, i, pool) {
   const p = gp.phases[i];
-  openSheet(`<div class="eyebrow num">${esc(p.time)} · ${esc(p.title)}</div><h2>${linkify(p.headline)}</h2>
-    <ul class="plain big">${p.items.map((x) => `<li class="${x.kind}">${x.kind === "rule" ? '<span class="badge blue">2026 규칙</span> ' : ""}${linkify(x.text)}${evChips(x.evidence, pool)}</li>`).join("")}</ul>
+  openSheet(`<div class="eyebrow num">${esc(p.time)}</div><h2>${esc(p.title)}에 할 일</h2>
+    <div class="todo">${p.items.map((x) => x.kind === "rule"
+      ? `<p class="sub" style="margin:12px 0 0"><span class="badge blue">2026 규칙</span> ${linkify(x.text)}${evChips(x.evidence, pool)}</p>`
+      : `<div class="todo-item"><div class="todo-do">${linkify(x.text)}</div>${x.why ? `<div class="todo-why"><b>왜?</b> ${linkify(x.why)}${evChips(x.evidence, pool)}</div>` : ""}</div>`).join("")}</div>
     <p class="sub" style="margin-top:12px">'2026 규칙'은 실제 경기 시각으로 확인한 사실이고, 나머지는 조합과 코칭 자료로 정리한 판단이에요.</p>
     <div class="card" style="margin-top:12px;background:var(--bg-layer)"><div class="eyebrow">조합을 이렇게 봤어요</div>
       <p class="body" style="margin:4px 0 0">우리: ${esc(gp.us.label)} — ${esc(gp.us.why)}${gp.them ? `<br>상대: ${esc(gp.them.label)} — ${esc(gp.them.why)}` : ""}</p></div>
