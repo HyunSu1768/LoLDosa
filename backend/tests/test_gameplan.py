@@ -58,4 +58,5 @@ def test_fight_plan_roles_targets_and_why():
     assert all(p["why"] for p in plan)
     peel = [p for p in plan if "옆을 지켜요" in p["text"]]
     assert peel and "121" in peel[0]["text"] and "67" not in peel[0]["text"]  # 베인은 파고드는 챔피언이 아님
-    assert any("74%" in p["why"] or "26%" in p["why"] for p in plan)  # 우리 데이터 한타 통계가 이유에 들어감
+    assert any("70%" in p["why"] or "62%" in p["why"] for p in plan)  # 우리 데이터 한타 통계가 이유에 들어감
+    assert all("74%" not in p["why"] and "26%" not in p["why"] for p in plan)  # 산수 효과인 '첫 킬 73.7%'는 쓰지 않음

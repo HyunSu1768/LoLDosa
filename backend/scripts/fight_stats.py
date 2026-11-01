@@ -1,7 +1,7 @@
 """한타 통계 (KR 솔랭 타임라인): 킬이 20초 안에 이어진 3킬 이상 묶음을 '한타'로 보고,
 - 첫 킬을 낸 팀이 그 한타를 이긴(킬을 더 많이 낸) 비율
 - 한타 직전 1분 팀 골드 차별 승률
-- 오브젝트(드래곤·유충·전령·바론) 처치 60초 전~10초 후 사이 한타를 이긴 팀이 그 오브젝트를 가져간 비율
+- 한타 시작 10초 전~한타 끝 60초 후 사이에 잡힌 오브젝트를 한타 이긴 팀이 가져간 비율 (첫 킬 승률은 산수 효과라 fight_null.py 로 기준선 비교)
 을 센다. 사용: python scripts/fight_stats.py ../data/matches.duckdb"""
 import sys
 from collections import defaultdict

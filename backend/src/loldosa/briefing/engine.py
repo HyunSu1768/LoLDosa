@@ -728,8 +728,9 @@ class BriefingEngine:
         if gp is not None and me:
             from .gameplan import build_fight_plan
 
-            fight = self.ev.add("KR 솔랭 4,616판 타임라인의 한타(20초 안 3킬 이상) 35,480개: 첫 킬을 낸 팀이 그 한타를 73.7% 이겼고, "
-                                "근처 한타를 이긴 팀이 드래곤을 78.4%, 바론을 87.5% 가져갔어요 (상관관계)", "KR 솔랭 타임라인", 35480)
+            fight = self.ev.add("KR 솔랭 4,616판 타임라인의 오브젝트 근처 한타: 첫 킬 팀이 드래곤 61.9%·바론 68.4%를 가져갔고(기준 50%), "
+                                "정글이 첫 데스면 상대가 드래곤 70.3%·바론 80.0%, 첫 킬 바로 다음 킬은 52.8%가 상대 팀, "
+                                "한타를 이긴 팀이 드래곤 78.4%·바론 87.5% (모두 상관관계)", "KR 솔랭 타임라인", 35480)
             gp["fight"] = build_fight_plan(me, allies, enemies, self.name,
                                            lambda c: (self.champs.get(c).tags if self.champs.get(c) else ()), fight, trait)
         return gp

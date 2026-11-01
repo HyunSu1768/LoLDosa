@@ -125,7 +125,7 @@ function fightSheet(gp, pool) {
   openSheet(`<div class="eyebrow">이 판 10명 기준</div><h2>한타 이렇게 해요</h2>
     <div class="todo">${gp.fight.map((x) => `<div class="todo-item"><div class="todo-do">${linkify(x.text)}</div>
       <div class="todo-why"><b>왜?</b> ${linkify(x.why)}${evChips(x.evidence, pool)}</div></div>`).join("")}</div>
-    <p class="sub" style="margin-top:12px">'첫 킬 팀이 73.7% 이겨요' 같은 숫자는 KR 솔랭 4,616판의 한타 35,480개에서 직접 센 값이에요. 원래 강한 팀이 첫 킬도 내는 효과가 섞여 있어요.</p>
+    <p class="sub" style="margin-top:12px">'정글이 먼저 죽으면 상대가 드래곤 70%' 같은 숫자는 KR 솔랭 4,616판의 오브젝트 근처 한타에서 직접 센 값이에요. 원래 강한 팀이 첫 킬도 내는 효과가 섞여 있어요.</p>
     <div class="btn-row end"><button class="btn fill m" data-close>닫기</button></div>`);
 }
 function phaseSheet(gp, i, pool) {

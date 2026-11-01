@@ -298,7 +298,11 @@ VS_NAMED = {  # (할 일, 왜)
 
 # ---------------------------------------------------------------- 한타
 # 근거: KR 솔랭 4,616판 타임라인에서 찾은 한타 35,480개 (scripts/fight_stats.py, research_notes/2026 롤 한타 운영/data_fights.md)
-FIRST_KILL_WIN = 0.737  # 한타 첫 킬을 낸 팀이 그 한타를 이긴 비율
+# 주의: '첫 킬 팀이 한타 73.7% 승'은 3킬 이상·동률 제외 정의에서 동전 던지기로도 73.8%가 나오는 산수 효과라 쓰지 않는다
+#       (scripts/fight_null.py). 대신 정의에 안 묶이는 오브젝트 결과를 쓴다 (scripts/fight_objective.py).
+FK_DRAGON, FK_BARON = 0.619, 0.684  # 오브젝트 근처 한타 첫 킬 팀이 그 오브젝트를 가져간 비율 (기준 50%)
+JG_DEAD_DRAGON, JG_DEAD_BARON = 0.703, 0.80  # 정글이 그 한타 첫 데스면 상대가 가져간 비율 (강타가 같이 사라짐)
+SECOND_OTHER = 0.528  # 첫 킬 직후 두 번째 킬을 상대 팀이 낸 비율: 끊고 쫓으면 받아치기를 당한다
 DRAGON_AFTER_FIGHT, BARON_AFTER_FIGHT = 0.784, 0.875  # 근처 한타를 이긴 팀이 그 오브젝트를 가져간 비율
 FRONT, CARRY = 0.231, 0.236  # 받은 피해 비중 상위 25% = 앞라인, 팀 딜 비중 상위 25% = 핵심 딜러
 
@@ -346,32 +350,35 @@ def build_fight_plan(me: int, allies: list[int], enemies: list[int], name, tags,
     if is_tank:
         add("내가 먼저 들어가서 묶어요. 묶은 다음엔 우리 딜러 앞으로 돌아와 막아요.",
             f"{josa(mn, '은는')} 상대를 묶은 기록이 챔피언 중 상위 {_pct_top(mt['engage'])}%이고, 팀이 받은 피해의 {mt['taken_share']:.0%}를 받아요. "
-            f"한타는 첫 킬을 낸 팀이 {FIRST_KILL_WIN:.0%} 이기는데, 첫 킬은 보통 묶인 사람에게서 나와요. 묶고 나서 뒤로 빠지면 우리 딜러가 상대 진입을 혼자 받아요.",
+            f"오브젝트 앞 한타에서 첫 킬을 낸 팀이 드래곤을 {FK_DRAGON:.0%}, 바론을 {FK_BARON:.0%} 가져가는데, 첫 킬은 보통 묶인 사람에게서 나와요. "
+            f"묶고 나서 뒤로 빠지면 우리 딜러가 상대 진입을 혼자 받아요.",
             "fact", trait_eid, fight_eid)
     elif is_assassin:
         tgt = f"{ek}" if ek else "상대 딜러"
         add(f"한타가 시작돼도 바로 들어가지 말고, 시야 밖 옆에서 기다렸다가 {tgt}에게 들어가요.",
             (f"{josa(mn, '은는')} 팀 딜의 {mt['dmg_share']:.0%}를 넣지만 맞아 주는 챔피언이 아니에요 (받은 피해 {mt['taken_share']:.0%}). "
              + (f"{josa(ek, '은는')} 상대 팀 딜의 {e_carry[0]:.0%}를 넣는 핵심 딜러라, 이 챔피언 하나를 먼저 지우면 상대는 남은 딜로 못 버텨요. " if ek else "")
-             + "처음부터 들어가면 상대 CC를 다 맞고 내가 첫 킬이 돼요."),
+             + f"처음부터 들어가면 상대 CC를 다 맞고 내가 먼저 죽어요. 정글이 먼저 죽으면 강타도 같이 사라져서 상대가 드래곤을 {JG_DEAD_DRAGON:.0%}, 바론을 {JG_DEAD_BARON:.0%} 가져가요."),
             "fact", trait_eid, fight_eid)
     elif is_carry:
         add("앞라인 뒤에서 닿는 적부터 치고, 상대 CC가 빠진 뒤에 들어가요.",
             f"{josa(mn, '은는')} 팀 딜의 {mt['dmg_share']:.0%}를 넣는 챔피언이라 내가 살아 있는 시간이 곧 우리 팀 딜이에요. "
-            f"내가 먼저 죽으면 그 한타는 첫 킬을 내준 쪽이 돼서 {1 - FIRST_KILL_WIN:.0%}만 이겨요.",
+            f"정글인 내가 먼저 죽으면 강타도 같이 사라져서 상대가 드래곤을 {JG_DEAD_DRAGON:.0%}, 바론을 {JG_DEAD_BARON:.0%} 가져가요.",
             "fact", trait_eid, fight_eid)
     else:
         add("우리 쪽으로 들어온 적부터 같이 잡아요. 상대 진영 깊이 혼자 들어가지 않아요.",
             f"{josa(mn, '은는')} 팀 딜 {mt['dmg_share']:.0%}, 받은 피해 {mt['taken_share']:.0%}로 딜과 버티기가 섞인 챔피언이에요. "
-            f"들어온 적은 이미 우리 쪽 깊이 있어서 잡기 쉽고, 첫 킬을 우리가 내면 한타를 {FIRST_KILL_WIN:.0%} 이겨요.", "fact", trait_eid, fight_eid)
+            f"들어온 적은 이미 우리 쪽 깊이 있어서 잡기 쉬워요. 반대로 내가 상대 진영 깊이 들어가 먼저 죽으면 강타가 같이 사라져서 "
+            f"상대가 드래곤을 {JG_DEAD_DRAGON:.0%} 가져가요.", "fact", trait_eid, fight_eid)
 
     # 2) 상대 CC: 먼저 들어가지 않을 조건
     if e_cc:
         nm = "·".join(name(c) for c in e_cc[:3])
         best = max(T(c)["engage"] for c in e_cc)
         add(f"상대 {nm}의 진입·CC가 빠지기 전엔 먼저 몸을 보이지 않아요.",
-            f"{josa(nm, '은는')} 상대를 묶은 기록이 챔피언 중 상위 {_pct_top(best)}% 안이에요. 이 CC에 한 명이 묶여 먼저 죽으면 "
-            f"그 한타는 {1 - FIRST_KILL_WIN:.0%}만 이겨요. CC를 쓴 걸 본 다음이 우리가 들어갈 때예요.", "fact", trait_eid, fight_eid)
+            f"{josa(nm, '은는')} 상대를 묶은 기록이 챔피언 중 상위 {_pct_top(best)}% 안이에요. 오브젝트 앞에서 이 CC에 묶여 먼저 죽으면 "
+            f"상대가 드래곤을 {FK_DRAGON:.0%} 가져가고, 그게 정글인 나라면 {JG_DEAD_DRAGON:.0%}예요. CC를 쓴 걸 본 다음이 우리가 들어갈 때예요.",
+            "fact", trait_eid, fight_eid)
 
     # 3) 지킬 사람 (상대에 돌진·암살이 있을 때)
     if a_carry and e_divers and not is_assassin:
@@ -384,7 +391,7 @@ def build_fight_plan(me: int, allies: list[int], enemies: list[int], name, tags,
     if len([c for c in front_us if c != me]) + (1 if is_tank else 0) == 0:
         add("정면 5:5 한타는 피하고, 시야로 한 명을 끊은 다음 오브젝트를 쳐요.",
             "우리 팀엔 피해를 받아 줄 앞라인이 없어요 (팀이 받은 피해 비중이 상위 25%인 챔피언이 없어요). 정면으로 붙으면 딜러가 먼저 맞아요. "
-            f"한 명을 먼저 끊으면 그 한타는 {FIRST_KILL_WIN:.0%} 이기는 싸움이 돼요.", "fact", trait_eid, fight_eid)
+            f"오브젝트 앞에서 첫 킬을 낸 팀이 드래곤을 {FK_DRAGON:.0%}, 바론을 {FK_BARON:.0%} 가져가요.", "fact", trait_eid, fight_eid)
 
     # 5) 오브젝트 앞: 데이터로 본 '이기는 순서'
     pickers = [c for c in allies if T(c) and T(c)["pick"] >= 0.8]
@@ -392,13 +399,13 @@ def build_fight_plan(me: int, allies: list[int], enemies: list[int], name, tags,
     if pickers:
         pk = "·".join(name(c) for c in pickers[:2])
         add(f"드래곤·바론 1분 전에 {pk}로 시야 밖 한 명을 먼저 노려요.",
-            f"{josa(pk, '은는')} 같이 끊는 킬이 챔피언 중 상위권이에요. 한타 첫 킬을 낸 팀이 {FIRST_KILL_WIN:.0%} 이기고, "
-            f"근처 한타를 이긴 팀이 드래곤은 {DRAGON_AFTER_FIGHT:.0%}, 바론은 {BARON_AFTER_FIGHT:.0%} 가져가요. 오브젝트보다 한 명이 먼저예요.",
+            f"{josa(pk, '은는')} 같이 끊는 킬이 챔피언 중 상위권이에요. 오브젝트 앞 첫 킬을 낸 팀이 드래곤을 {FK_DRAGON:.0%}, 바론을 {FK_BARON:.0%} 가져가요. "
+            f"끊은 뒤엔 쫓지 말고 바로 오브젝트로 가요. 첫 킬 바로 다음 킬은 {SECOND_OTHER:.0%}가 상대 팀에서 나와요 (쫓다가 받아치기를 당해요).",
             "fact", trait_eid, fight_eid)
     elif e_pickers:
         pk = "·".join(name(c) for c in e_pickers[:2])
         add("오브젝트 앞 와드는 둘이 같이 박고, 혼자 시야 없는 곳에 들어가지 않아요.",
-            f"상대 {josa(pk, '은는')} 같이 끊는 킬이 챔피언 중 상위권이에요. 혼자 있다 잡히면 5:4가 되고, "
-            f"첫 킬을 내준 한타는 {1 - FIRST_KILL_WIN:.0%}만 이겨요. 그러면 드래곤은 {DRAGON_AFTER_FIGHT:.0%} 확률로 넘어가요.",
+            f"상대 {josa(pk, '은는')} 같이 끊는 킬이 챔피언 중 상위권이에요. 오브젝트 앞에서 한 명이 먼저 잡히면 상대가 드래곤을 {FK_DRAGON:.0%} 가져가고, "
+            f"잡힌 게 정글인 나라면 {JG_DEAD_DRAGON:.0%}예요.",
             "fact", trait_eid, fight_eid)
     return out
