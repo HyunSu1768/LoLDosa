@@ -61,6 +61,8 @@ def main(data_dir: str) -> None:
             a["solo_t"] += ch.get("soloTurretsLategame", 0)
             a["solo_k"] += ch.get("soloKills", 0)
             a["bld"] += p["damageDealtToBuildings"] / mins
+            a["dmg_share"] += ch.get("teamDamagePercentage", 0)  # 팀 딜 비중: 한타에서 누가 핵심 딜러인지
+            a["taken_share"] += ch.get("damageTakenOnTeamPercentage", 0)  # 팀이 받은 피해 중 비중: 누가 앞라인인지
             if m["gameDuration"] < 25 * 60:
                 a["e_g"] += 1; a["e_w"] += p["win"]
             elif m["gameDuration"] >= 30 * 60:
@@ -90,6 +92,8 @@ def main(data_dir: str) -> None:
             "split": round(0.6 * P["solo_t"][c] + 0.2 * P["solo_k"][c] + 0.2 * P["bld"][c], 3),
             "siege": round(0.5 * P["bld"][c] + 0.5 * poke, 3),
             "tank": round(P["tank"][c], 3),
+            "dmg_share": round(a["dmg_share"] / a["games"], 3),
+            "taken_share": round(a["taken_share"] / a["games"], 3),
             "late": round(PL[c], 3),
             "late_diff": round(late[c], 4),
         }
